@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Cardex de {{ alumno.matricula }}</title>
+    <style>
+        body { font-family: sans-serif; margin: 2rem; background: #f6f7f9; color: #222; }
+        h1 { border-bottom: 2px solid #0b5; padding-bottom: .3rem; }
+        h2 { margin: 0 0 .6rem; font-size: 1.15rem; }
+        .volver { display: inline-block; margin-bottom: 1rem; color: #06a; }
+        .contenedor { background: #fff; border-radius: 8px; padding: 1rem 1.2rem; margin-bottom: 1.2rem; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+        table { border-collapse: collapse; width: 100%; font-size: .95rem; }
+        th, td { border: 1px solid #ddd; padding: .4rem .6rem; text-align: left; }
+        th { background: #eef; }
+        .datos { list-style: none; margin: 0; padding: 0; }
+        .datos li { padding: .15rem 0; }
+        .campo-calificacion { width: 6rem; padding: .25rem .4rem; border: 1px solid #bbb; border-radius: 4px; }
+        .guardar { margin-top: 1rem; padding: .5rem 1.2rem; background: #0b5; color: #fff; border: 0; border-radius: 4px; font-size: .95rem; cursor: pointer; }
+        .guardar:hover { background: #094; }
+        .mensajes { list-style: none; margin: 0 0 1rem; padding: .6rem 1rem; border-radius: 6px; background: #e6f7ea; border: 1px solid #9ed6b0; }
+        .errores { background: #fdeaea; border-color: #e6a3a3; }
+        .error { color: #b00; font-size: .8rem; display: block; }
+    </style>
+</head>
+<body>
+    <h1>Cardex</h1>
+    <a class="volver" href="{% url 'alumno_list' %}">&larr; Volver a la lista de alumnos</a>
+
+    <div class="contenedor">
+        <h2>{{ alumno.matricula }} – {{ alumno.nombre }}</h2>
+        <ul class="datos">
+            <li><strong>Carrera:</strong> {{ alumno.carrera }}</li>
+            <li><strong>Semestre:</strong> {{ alumno.semestre }}</li>
+            <li><strong>Especialidad:</strong> {{ alumno.especialidad|default:"—" }}</li>
+            <li><strong>Estatus:</strong> {{ alumno.get_estatus_display }}</li>
+            <li><strong>Materias cursadas:</strong> {{ alumno.materias_cursadas }}</li>
+            <li><strong>Promedio general:</strong> {% if alumno.promedio_general is not None %}{{ alumno.promedio_general }}{% else %}—{% endif %}</li>
+        </ul>
+    </div>
+
+    {% if messages %}
+    <ul class="mensajes">
+        {% for mensaje in messages %}
+        <li>{{ mensaje }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+
+    <form method="post">
+        {% csrf_token %}
+        {{ formset.management_form }}
+
+        {% if formset.non_form_errors %}
+        <ul class="mensajes errores">
+            {% for error in formset.non_form_errors %}<li>{{ error }}</li>{% endfor %}
+        </ul>
+        {% endif %}
+
+        <div class="contenedor">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Código</th>
+                        <th>Materia</th>
+                        <th>Periodo</th>
+                        <th>Turno</th>
+                        <th>Horario</th>
+                        <th>Aula</th>
+                        <th>Créditos</th>
+                        <th>Calificación final</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for form in formset %}
+                    <tr>
+                        <td>{{ form.instance.grupo.materia.codigo }}</td>
+                        <td>{{ form.instance.grupo.materia.nombre }}</td>
+                        <td>{{ form.instance.grupo.periodo }}</td>
+                        <td>{{ form.instance.grupo.get_turno_display }}</td>
+                        <td>{{ form.instance.grupo.horario }}</td>
+                        <td>{{ form.instance.grupo.aula|default:"—" }}</td>
+                        <td>{{ form.instance.grupo.materia.creditos }}</td>
+                        <td>
+                            {{ form.id }}
+                            {{ form.valor }}
+                            {% if form.valor.errors %}<span class="error">{{ form.valor.errors|striptags }}</span>{% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="8">Sin materias cursadas</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            {% if formset.forms %}
+            <button type="submit" class="guardar">Guardar calificaciones</button>
+            {% endif %}
+        </div>
+    </form>
+</body>
+</html>

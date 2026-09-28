@@ -22,4 +22,6 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('', views.index, name='index'),
     path('alumnos/', views.alumno_list, name='alumno_list'),
+    path('alumnos/<str:matricula>/cardex/', views.alumno_cardex,
+         name='alumno_cardex'),
 ]

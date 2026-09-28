@@ -141,3 +141,15 @@ class Alumno(models.Model):
 
     def __str__(self):
         return f'{self.matricula} – {self.nombre}'
+
+    @property
+    def materias_cursadas(self):
+        return self.calificaciones.count()
+
+    @property
+    def promedio_general(self):
+        valores = [c.valor for c in self.calificaciones.all()
+                   if c.valor is not None]
+        if not valores:
+            return None
+        return (sum(valores) / Decimal(len(valores))).quantize(Decimal('0.0'))
