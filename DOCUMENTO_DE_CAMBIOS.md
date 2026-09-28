@@ -77,3 +77,4 @@ Documento que registra todos los cambios realizados sobre el proyecto, indicando
 2. `feat: plantilla de lista con DataTables y exportación a Excel` — vista, ruta y plantilla `alumno_list` con botones DataTables.
 3. `feat: migración a base de datos MySQL` — configuración `DATABASES`, backend PyMySQL y ajustes de conexión.
 4. `docs: documento de cambios y correcciones de configuración` — este documento, `.gitignore`, `ALLOWED_HOSTS` y scripts de arranque.
+5. `fix: agrega archivos asgi y wsgi del proyecto Django` — archivos de entrada ASGI/WSGI faltantes.
