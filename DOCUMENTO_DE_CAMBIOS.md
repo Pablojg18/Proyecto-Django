@@ -1,0 +1,79 @@
+# Documento de Cambios — Proyecto Django
+
+Documento que registra todos los cambios realizados sobre el proyecto, indicando **qué** se hizo y **dónde** se implementó.
+
+---
+
+## 1. Configuración del entorno virtual (`entorno`)
+
+| Qué | Dónde |
+|---|---|
+| Creación del entorno virtual con `python -m venv` | Carpeta `entorno/` (raíz del proyecto) |
+| Instalación de Django 6.1.1 + drivers | `entorno/Lib/site-packages/` |
+| Paquetes instalados: `django==6.1.1`, `PyMySQL 1.2.3`, `cryptography`, `cffi`, `pycparser` | `entorno/` |
+
+## 2. Carga del proyecto con sus modelos
+
+| Qué | Dónde |
+|---|---|
+| Verificación de migraciones y modelos cargados | `academico/models.py` (modelos `Carrera`, `Materia`, `Grupo`, `Alumno`, `Calificacion`) |
+| Migración aplicada (tablas creadas) | `academico/migrations/0001_initial.py` |
+
+## 3. Módulo de administración activado (más de 2 modelos)
+
+| Qué | Dónde |
+|---|---|
+| Registro de los 5 modelos en el admin de Django | `academico/admin.py` (`CarreraAdmin`, `MateriaAdmin`, `GrupoAdmin`, `AlumnoAdmin`, `CalificacionAdmin`) |
+| Superusuario creado (`admin` / `admin123`) | Base de datos (tabla `auth_user`) |
+
+## 4. Plantilla de lista con DataTables y exportación a Excel
+
+| Qué | Dónde |
+|---|---|
+| Nueva plantilla tipo lista para el modelo `Alumno` | `academico/templates/academico/alumno_list.html` |
+| Inicialización de DataTables.net (CDN) | `alumno_list.html` (bloque `<script>`) |
+| Botón "Exportar a Excel" (`excelHtml5`) + JSZip | `alumno_list.html` (botones DataTables) |
+| Vista `alumno_list` que alimenta los datos | `academico/views.py` |
+| Ruta `/alumnos/` | `escolar_project/urls.py` |
+| Enlace desde la portada | `academico/templates/academico/index.html` |
+
+## 5. Corrección de configuración
+
+| Qué | Dónde |
+|---|---|
+| `ALLOWED_HOSTS` estaba vacío → se añadieron `localhost`, `127.0.0.1`, `testserver` | `escolar_project/settings.py` |
+
+## 6. Migración de SQLite → MySQL
+
+| Qué | Dónde |
+|---|---|
+| Instalación de driver `PyMySQL` | `entorno/` |
+| Configuración de la conexión MySQL (BD `escolar`, puerto `3307`, usuario `root`) | `escolar_project/settings.py` (bloque `DATABASES`) |
+| Registro del backend de PyMySQL como `MySQLdb` | `escolar_project/__init__.py` |
+| Migración completa ejecutada contra MySQL 8.4.11 | Base de datos MySQL `escolar` (tablas de academico, auth, admin, contenttypes, sessions) |
+| Datos migrados desde `db.sqlite3` (3 carreras, 1 materia, 1 grupo, 2 alumnos, 1 calificación) | Base de datos MySQL `escolar` |
+| Instalación de MySQL 8.4.11 en `%LOCALAPPDATA%\mysql84` (instancia independiente, no toca el MySQL 8.0 existente) | `%LOCALAPPDATA%\mysql84\mysql-8.4.11-winx64` |
+| Superusuario recreado en MySQL (`admin` / `admin123`) | Base de datos MySQL (tabla `auth_user`) |
+
+## 7. Scripts de arranque
+
+| Qué | Dónde |
+|---|---|
+| Script para levantar MySQL 8.4 en el puerto 3307 | `iniciar_mysql84.bat` (raíz) |
+| Script para activar el entorno virtual y ejecutar `runserver` | `iniciar_servidor.bat` (raíz) |
+
+## 8. Archivos de control de versiones
+
+| Qué | Dónde |
+|---|---|
+| Reglas de exclusión para git (entorno, BD, cachés Python, IDE) | `.gitignore` (raíz) |
+| Este documento | `DOCUMENTO_DE_CAMBIOS.md` (raíz) |
+
+---
+
+## Historial de commits
+
+1. `init: andamiaje de Django y modelos del módulo académico` — estructura del proyecto, app `academico` con sus modelos y migraciones.
+2. `feat: plantilla de lista con DataTables y exportación a Excel` — vista, ruta y plantilla `alumno_list` con botones DataTables.
+3. `feat: migración a base de datos MySQL` — configuración `DATABASES`, backend PyMySQL y ajustes de conexión.
+4. `docs: documento de cambios y correcciones de configuración` — este documento, `.gitignore`, `ALLOWED_HOSTS` y scripts de arranque.
