@@ -6,76 +6,27 @@
     <style>
         body { font-family: sans-serif; margin: 2rem; background: #f6f7f9; color: #222; }
         h1 { border-bottom: 2px solid #0b5; padding-bottom: .3rem; }
+        h2 { margin: 0 0 .5rem; font-size: 1.05rem; }
         section { background: #fff; border-radius: 8px; padding: 1rem 1.2rem; margin-bottom: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
-        table { border-collapse: collapse; width: 100%; font-size: .95rem; }
-        th, td { border: 1px solid #ddd; padding: .4rem .6rem; text-align: left; }
-        th { background: #eef; }
+        ul { margin: 0; padding-left: 1.2rem; }
         a { color: #06a; }
-        .vacio { color: #888; font-style: italic; }
     </style>
 </head>
 <body>
     <h1>Sistema escolar</h1>
 
     <section>
-        <h2>Carreras</h2>
-        {% if carreras %}
-        <table>
-            <tr><th>Código</th><th>Nombre</th><th>Duración</th><th>Créditos</th></tr>
-            {% for c in carreras %}
-            <tr><td>{{ c.codigo }}</td><td>{{ c.nombre }}</td><td>{{ c.duracion }}</td><td>{{ c.creditos }}</td></tr>
-            {% endfor %}
-        </table>
-        {% else %}<p class="vacio">Sin registros</p>{% endif %}
-    </section>
-
-    <section>
-        <h2>Materias</h2>
-        {% if materias %}
-        <table>
-            <tr><th>Código</th><th>Nombre</th><th>Unidades</th><th>Créditos</th><th>Carrera</th></tr>
-            {% for m in materias %}
-            <tr><td>{{ m.codigo }}</td><td>{{ m.nombre }}</td><td>{{ m.unidades }}</td><td>{{ m.creditos }}</td><td>{{ m.carrera }}</td></tr>
-            {% endfor %}
-        </table>
-        {% else %}<p class="vacio">Sin registros</p>{% endif %}
-    </section>
-
-    <section>
-        <h2>Grupos</h2>
-        {% if grupos %}
-        <table>
-            <tr><th>Materia</th><th>Periodo</th><th>Turno</th><th>Horario</th><th>Aula</th><th>Cupo</th><th>Alumnos</th></tr>
-            {% for g in grupos %}
-            <tr><td>{{ g.materia }}</td><td>{{ g.periodo }}</td><td>{{ g.get_turno_display }}</td><td>{{ g.horario }}</td><td>{{ g.aula }}</td><td>{{ g.cupo }}</td><td>{{ g.num_alumnos }}</td></tr>
-            {% endfor %}
-        </table>
-        {% else %}<p class="vacio">Sin registros</p>{% endif %}
-    </section>
-
-    <section>
         <h2>Alumnos</h2>
-        <p><a href="{% url 'alumno_list' %}">Ver lista con DataTables (exportar a Excel)</a></p>
-        {% if alumnos %}
-        <table>
-            <tr><th>Matrícula</th><th>Nombre</th><th>Semestre</th><th>Estatus</th><th>Carrera</th></tr>
-            {% for a in alumnos %}
-            <tr><td>{{ a.matricula }}</td><td>{{ a.nombre }}</td><td>{{ a.semestre }}</td><td>{{ a.get_estatus_display }}</td><td>{{ a.carrera }}</td></tr>
-            {% endfor %}
-        </table>
-        {% else %}<p class="vacio">Sin registros</p>{% endif %}
+        <ul>
+            <li><a href="{% url 'alumno_list' %}">Lista de alumnos</a> &mdash; promedio general y cardex</li>
+        </ul>
     </section>
 
     <section>
-        <h2>Calificaciones</h2>
-        {% if calificaciones %}
-        <table>
-            <tr><th>Alumno</th><th>Grupo</th><th>Valor</th><th>Inscripción</th><th>Captura</th></tr>
-            {% for cal in calificaciones %}
-            <tr><td>{{ cal.alumno }}</td><td>{{ cal.grupo }}</td><td>{{ cal.valor|default:"—" }}</td><td>{{ cal.fecha_inscripcion }}</td><td>{{ cal.fecha_captura|default:"—" }}</td></tr>
-            {% endfor %}
-        </table>
-        {% else %}<p class="vacio">Sin registros</p>{% endif %}
+        <h2>Captura de datos</h2>
+        <ul>
+            <li><a href="{% url 'admin:index' %}">Administración de Django</a> &mdash; carreras, materias, grupos, alumnos y calificaciones</li>
+        </ul>
     </section>
 </body>
 </html>

@@ -69,6 +69,45 @@ Documento que registra todos los cambios realizados sobre el proyecto, indicando
 | Reglas de exclusión para git (entorno, BD, cachés Python, IDE) | `.gitignore` (raíz) |
 | Este documento | `DOCUMENTO_DE_CAMBIOS.md` (raíz) |
 
+## 9. Promedio general y cardex de alumnos
+
+| Qué | Dónde |
+|---|---|
+| Propiedad `materias_cursadas` (inscripciones del alumno) | `academico/models.py` (`Alumno`) |
+| Propiedad `promedio_general` (promedio de las materias ya calificadas; `None` si no hay ninguna) | `academico/models.py` (`Alumno`) |
+| Formulario de captura de calificación final por materia | `academico/forms.py` (`CalificacionForm`, `CalificacionFormSet`) |
+| Columnas "Materias cursadas", "Promedio general" y botón "Cardex" en la lista | `academico/templates/academico/alumno_list.html` |
+| Ordenamiento numérico de las columnas numéricas y exclusión del botón en la exportación | `alumno_list.html` (bloque `<script>`, `columnDefs`) |
+| Vista `alumno_cardex` (GET muestra el formulario, POST guarda y fija `fecha_captura`) | `academico/views.py` |
+| Formulario con la lista de materias cursadas y sus calificaciones | `academico/templates/academico/alumno_cardex.html` |
+| Ruta `/alumnos/<matricula>/cardex/` | `escolar_project/urls.py` |
+| `prefetch_related('calificaciones')` para evitar consultas por alumno | `academico/views.py` (`alumno_list`) |
+
+## 10. Base de datos en MariaDB y proyecto simplificado
+
+| Qué | Dónde |
+|---|---|
+| Base de datos `escolar` creada con `utf8mb4` y migraciones aplicadas | Base de datos MariaDB `escolar` (servicio `MariaDB`, puerto 3307) |
+| Verificación: 15 pruebas contra MariaDB y flujo completo por HTTP (listado, cardex, guardado de calificaciones) | Ejecución local, no se agrega archivo al proyecto |
+| Datos de ejemplo (2 carreras, 3 materias, 3 grupos, 3 alumnos, 5 calificaciones), sobre los registros que ya venían de la base original | Base de datos `escolar` |
+| Eliminados los scripts de arranque: el servicio `MariaDB` ya inicia solo con Windows y `runserver` se lanza a mano | `iniciar_mysql84.bat`, `iniciar_servidor.bat` (raíz) |
+| Eliminada la configuración de correo `MAILERS`, que no era una opción válida de Django | `escolar_project/settings.py` |
+| Portada convertida en un menú con dos enlaces, en vez de un volcado de las 5 tablas | `academico/templates/academico/index.html` |
+| Vista `index` sin consultas a la base de datos | `academico/views.py` |
+| Eliminadas las importaciones sin uso (`Carrera`, `Materia`, `Grupo`) | `academico/views.py` |
+| Eliminados `asgi.py` (solo se usa `wsgi.py`) y `academico/tests.py` (estaba vacío) | `escolar_project/asgi.py`, `academico/tests.py` |
+
+> **Nota:** el servidor del puerto 3307 es **MariaDB 12.1.2** (servicio de Windows con inicio
+> automático), no la instalación portátil de MySQL 8.4 que describía `iniciar_mysql84.bat`.
+> La configuración de `settings.py` no cambia porque `django.db.backends.mysql` también
+> sirve para MariaDB mediante PyMySQL. Para levantar el proyecto:
+
+```
+python manage.py migrate
+python manage.py runserver
+```
+
+
 ---
 
 ## Historial de commits
@@ -78,3 +117,5 @@ Documento que registra todos los cambios realizados sobre el proyecto, indicando
 3. `feat: migración a base de datos MySQL` — configuración `DATABASES`, backend PyMySQL y ajustes de conexión.
 4. `docs: documento de cambios y correcciones de configuración` — este documento, `.gitignore`, `ALLOWED_HOSTS` y scripts de arranque.
 5. `fix: agrega archivos asgi y wsgi del proyecto Django` — archivos de entrada ASGI/WSGI faltantes.
+6. `feat: promedio general y cardex de alumnos` — propiedades de promedio en el modelo, formulario de captura de calificación final y vista de cardex.
+7. `chore: base de datos en MariaDB y proyecto simplificado` — se crea y migra la base `escolar`, se eliminan los scripts `.bat`, `asgi.py` y `tests.py`, y la portada pasa a ser un menú.

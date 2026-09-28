@@ -2,18 +2,11 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.utils import timezone
 from .forms import CalificacionFormSet
-from .models import Carrera, Materia, Grupo, Alumno, Calificacion
+from .models import Alumno, Calificacion
 
 
 def index(request):
-    contexto = {
-        'carreras': Carrera.objects.all(),
-        'materias': Materia.objects.all(),
-        'grupos': Grupo.objects.all(),
-        'alumnos': Alumno.objects.all(),
-        'calificaciones': Calificacion.objects.all(),
-    }
-    return render(request, 'academico/index.html', contexto)
+    return render(request, 'academico/index.html')
 
 
 def alumno_list(request):
