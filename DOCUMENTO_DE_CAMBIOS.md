@@ -107,6 +107,106 @@ python manage.py migrate
 python manage.py runserver
 ```
 
+---
+
+## 11. Roles de usuario y control de acceso
+
+| Qué | Dónde |
+|---|---|
+| Modelo `Perfil` (1:1 con `User`) con `rol` (`ADMINISTRADOR`, `COORDINADOR`, `ESTUDIANTE`) y `alumno` asociado opcional, con `clean()` que exige alumno solo al estudiante | `academico/models.py` |
+| `Alumno.delete()` borra también el usuario de acceso del alumno | `academico/models.py` |
+| Migración del modelo y de datos que deja a los superusuarios como administradores | `academico/migrations/0002_perfil.py`, `0003_asigna_rol_administrador.py` |
+| `requiere_rol(*roles)` para vistas de función y `RolRequeridoMixin` para vistas de clase; ambos exigen sesión iniciada ydevuelven al inicio con mensaje si el rol no corresponde | `academico/permisos.py` |
+| `perfil_de`, `rol_de`, `es_alumno_del_usuario` como consultas de apoyo | `academico/permisos.py` |
+| Contexto `perfil`, `es_admin`, `es_coordinador`, `es_estudiante` para el menú según rol | `academico/context_processors.py` |
+| Inicio y cierre de sesión con `LoginView`/`LogoutView` (el cierre es por POST) | `academico/views/cuentas.py` |
+| Plantilla de acceso con explicación de los tres roles | `academico/templates/registration/login.html` |
+| Menú por rol, indicador de rol y botón de cerrar sesión | `academico/templates/academico/base.html` |
+| Portada convertida en tablero: resumen del rol y lista de operaciones permitidas | `academico/templates/academico/index.html` |
+| `PERIODO_ACTUAL`, `CALIFICACION_APROBADA`, `LOGIN_URL`, `LOGIN_REDIRECT_URL`, `LOGOUT_REDIRECT_URL`, idioma `es-mx` y zona horaria `America/Mexico_City` | `escolar_project/settings.py` |
+| Rutas de sesión y de todas las operaciones | `escolar_project/urls.py` |
+
+Matriz de permisos implementada:
+
+| Operación | Administrador | Coordinador | Estudiante |
+|---|---|---|---|
+| Alta, edición y baja de alumnos, carreras y materias | Sí | No | No |
+| Consulta de alumnos, carreras y materias | Sí | Sí | No |
+| Alta, edición y baja de grupos | No | Sí | No |
+| Inscripción de alumnos (elegir alumno y materias) | No | Sí | No |
+| Inscripción propia | No | No | Sí (sin carga activa) |
+| Consulta de carga académica | No | Sí | Sí (solo la propia) |
+| Captura de calificaciones finales (cardex) | No | Sí | No |
+
+> El superusuario de `/admin/` ignora la matriz anterior para poder revisar todo el
+> sistema; cualquier otro usuario queda sujeto a su rol.
+
+## 12. Catálogos con altas, ediciones y bajas
+
+| Qué | Dónde |
+|---|---|
+| Vistas genéricas `ListView`, `CreateView`, `UpdateView` y `DeleteView` por catálogo | `academico/views/catalogos.py` |
+| Formularios de alumno (con usuario), carrera, materia y grupo | `academico/forms.py` |
+| `AlumnoForm` crea el usuario con la matrícula como nombre de acceso y exige contraseña inicial al dar de alta | `academico/forms.py` |
+| Plantilla común de alta/edición y de confirmación de baja | `academico/templates/academico/form_generico.html`, `confirmar_borrado.html` |
+| Listados con DataTables y exportación a Excel, con acciones según el rol | `academico/templates/academico/{alumno,carrera,materia,grupo}_list.html` |
+| Campos derivados en los listados: materias y alumnos por carrera, grupos por materia, lugares libres por grupo | `academico/models.py` (`Grupo.lugares_disponibles`), vistas de catálogo |
+
+## 13. Inscripción de materias
+
+| Qué | Dónde |
+|---|---|
+| Servicio `inscribir_alumno` con validación de reglas y transacción atómica; el coordinador usa `forzar=True` | `academico/services.py` |
+| Servicio `desinscribir_alumno` que libera lugares del grupo | `academico/services.py` |
+| Reglas: periodo vigente, materia de la carrera del alumno, materia no cursada, grupo con cupo, sin inscripción duplicada y sin carga académica activa para el estudiante | `academico/services.py` |
+| `GruposChoiceField` con checkboxs que muestran código, nombre, turno, horario, aula y lugares libres | `academico/forms.py` |
+| `grupos_inscribibles` devuelve cada grupo del periodo con su motivo de bloqueo | `academico/forms.py` |
+| Paso 1 del coordinador: elegir alumno con filtros de búsqueda y carrera | `academico/views/inscripcion.py` (`AlumnosParaInscribir`) |
+| Paso 2 del coordinador y del estudiante: misma pantalla reutilizada, con opción de dar de baja inscripciones solo para el coordinador | `academico/views/inscripcion.py` (`InscripcionBase`, `InscripcionCoordinador`, `MiInscripcion`) |
+| Pantalla de inscripción con materias del periodo, motivo de las no disponibles y materias ya inscritas | `academico/templates/academico/inscripcion.html` |
+| Pantalla de selección de alumno | `academico/templates/academico/inscripcion_alumnos.html` |
+| Rutas `/inscripcion/`, `/coordinacion/inscripcion/` y `/coordinacion/inscripcion/<matricula>/` | `escolar_project/urls.py` |
+
+## 14. Carga académica
+
+| Qué | Dónde |
+|---|---|
+| Propiedades de cálculo: `carga_academica`, `tiene_carga_activa`, `ha_cursado`, `materias_aprobadas`, `creditos_acumulados`, `creditos_en_curso`, `avance_carrera` | `academico/models.py` (`Alumno`) |
+| `Calificacion.es_aprobada` a partir de `CALIFICACION_APROBADA` | `academico/models.py` (`Calificacion`) |
+| Consulta por parte del coordinador o administrador | `academico/views/carga.py` (`carga_de_alumno`) |
+| Consulta del estudiante sobre su propio registro | `academico/views/carga.py` (`mi_carga_academica`) |
+| Pantalla con resumen, datos del alumno, carga del periodo e historial con situación de cada materia | `academico/templates/academico/carga_academica.html` |
+| Rutas `/alumnos/<matricula>/carga/` y `/mi-carga-academica/` | `escolar_project/urls.py` |
+
+La captura de calificaciones finales de la tarea anterior se conserva en
+`academico/views/cardex.py`, ahora protegida para coordinador y administrador.
+
+## 15. Pruebas y usuarios de demostración
+
+| Qué | Dónde |
+|---|---|
+| 40 pruebas: sesión, matriz de permisos por rol, CRUD de los cuatro catálogos, reglas de inscripción y carga académica | `academico/tests.py` |
+| Comando que crea un coordinador y un usuario por cada alumno, para probar los tres roles | `academico/management/commands/crear_usuarios_demo.py` |
+| Registro del modelo `Perfil` en el admin de Django | `academico/admin.py` |
+
+Comandos de apoyo:
+
+```
+python manage.py test academico
+python manage.py crear_usuarios_demo
+```
+
+Accesos de prueba que deja el comando:
+
+| Rol | Usuario | Contraseña |
+|---|---|---|
+| Administrador | el superusuario creado con `createsuperuser` | la que se defina |
+| Coordinador | `coordinador` | `coordinador123` |
+| Estudiante | la matrícula de cada alumno | `alumno123` |
+
+> Para abrir un periodo nuevo basta cambiar `PERIODO_ACTUAL` en `settings.py`: es el
+> valor contra el que se valida la inscripción y se calcula la carga académica activa.
+
 
 ---
 
@@ -119,3 +219,4 @@ python manage.py runserver
 5. `fix: agrega archivos asgi y wsgi del proyecto Django` — archivos de entrada ASGI/WSGI faltantes.
 6. `feat: promedio general y cardex de alumnos` — propiedades de promedio en el modelo, formulario de captura de calificación final y vista de cardex.
 7. `chore: base de datos en MariaDB y proyecto simplificado` — se crea y migra la base `escolar`, se eliminan los scripts `.bat`, `asgi.py` y `tests.py`, y la portada pasa a ser un menú.
+8. `feat: roles, catalogos, inscripcion y carga academica` — perfil con rol e inicio de sesión, CRUD de alumnos, carreras, materias y grupos, reglas de inscripción y consulta de carga académica, con sus pruebas.

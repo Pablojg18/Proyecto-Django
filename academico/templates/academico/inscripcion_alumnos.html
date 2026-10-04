@@ -1,0 +1,58 @@
+{% extends 'academico/base.html' %}
+
+{% block titulo %}Elegir alumno{% endblock %}
+
+{% block contenido %}
+<h1>Inscripción de alumnos</h1>
+<p class="ayuda">Paso 1: elige al alumno al que quieres inscribir. Paso 2: selecciona sus materias del periodo {{ periodo_actual }}.</p>
+
+<div class="contenedor">
+    <form method="get" class="filtros">
+        {{ filtro.q }}
+        {{ filtro.carrera }}
+        <button type="submit" class="boton">Filtrar</button>
+    </form>
+</div>
+
+<div class="contenedor">
+    <table>
+        <thead>
+            <tr>
+                <th>Matrícula</th>
+                <th>Nombre</th>
+                <th>Carrera</th>
+                <th class="numero">Semestre</th>
+                <th class="numero">Materias cursadas</th>
+                <th>Carga activa</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for a in alumnos %}
+            <tr>
+                <td>{{ a.matricula }}</td>
+                <td>{{ a.nombre }}</td>
+                <td>{{ a.carrera }}</td>
+                <td class="numero">{{ a.semestre }}</td>
+                <td class="numero">{{ a.materias_cursadas }}</td>
+                <td>
+                    {% if a.tiene_carga_activa %}
+                    <span class="etiqueta-estado ok">Sí</span>
+                    {% else %}
+                    <span class="etiqueta-estado no">No</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <div class="acciones">
+                        <a class="boton" href="{% url 'inscripcion_alumno' a.matricula %}">Inscribir</a>
+                        <a class="boton secundario" href="{% url 'carga_de_alumno' a.matricula %}">Carga</a>
+                    </div>
+                </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="7">Sin resultados</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

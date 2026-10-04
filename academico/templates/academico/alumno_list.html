@@ -1,85 +1,81 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <title>Lista de Alumnos</title>
-    <link rel="stylesheet" href="https://cdn.datatables.net/2.2.2/css/dataTables.dataTables.min.css">
-    <link rel="stylesheet" href="https://cdn.datatables.net/buttons/3.2.3/css/buttons.dataTables.min.css">
-    <style>
-        body { font-family: sans-serif; margin: 2rem; background: #f6f7f9; color: #222; }
-        h1 { border-bottom: 2px solid #0b5; padding-bottom: .3rem; }
-        .volver { display: inline-block; margin-bottom: 1rem; color: #06a; }
-        .contenedor { background: #fff; border-radius: 8px; padding: 1rem 1.2rem; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
-        .boton-cardex { display: inline-block; padding: .2rem .7rem; background: #0b5; color: #fff !important; text-decoration: none; border-radius: 4px; font-size: .85rem; }
-        .boton-cardex:hover { background: #094; }
-        .numero { text-align: right; }
-    </style>
-</head>
-<body>
-    <h1>Alumnos</h1>
-    <a class="volver" href="{% url 'index' %}">&larr; Volver al inicio</a>
+{% extends 'academico/base.html' %}
 
-    <div class="contenedor">
-        <table id="tabla-alumnos" class="display" style="width:100%">
-            <thead>
-                <tr>
-                    <th>Matrícula</th>
-                    <th>Nombre</th>
-                    <th>Semestre</th>
-                    <th>Estatus</th>
-                    <th>Carrera</th>
-                    <th class="columna-numerica">Materias cursadas</th>
-                    <th class="columna-numerica">Promedio general</th>
-                    <th class="columna-acciones">Cardex</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for a in alumnos %}
-                <tr>
-                    <td>{{ a.matricula }}</td>
-                    <td>{{ a.nombre }}</td>
-                    <td>{{ a.semestre }}</td>
-                    <td>{{ a.get_estatus_display }}</td>
-                    <td>{{ a.carrera }}</td>
-                    <td class="numero">{{ a.materias_cursadas }}</td>
-                    <td class="numero">{% if a.promedio_general is not None %}{{ a.promedio_general }}{% else %}—{% endif %}</td>
-                    <td><a class="boton-cardex" href="{% url 'alumno_cardex' a.matricula %}">Cardex</a></td>
-                </tr>
-                {% empty %}
-                <tr><td colspan="8">Sin registros</td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+{% block titulo %}Alumnos{% endblock %}
 
-    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-    <script src="https://cdn.datatables.net/2.2.2/js/dataTables.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-    <script src="https://cdn.datatables.net/buttons/3.2.3/js/dataTables.buttons.min.js"></script>
-    <script src="https://cdn.datatables.net/buttons/3.2.3/js/buttons.html5.min.js"></script>
-    <script>
-        const columnasExport = { columns: [0, 1, 2, 3, 4, 5, 6] };
-        new DataTable('#tabla-alumnos', {
-            pageLength: 10,
-            language: {
-                url: 'https://cdn.datatables.net/plug-ins/2.2.2/i18n/es-MX.json'
-            },
-            dom: 'Bfrtip',
-            columnDefs: [
-                { targets: '.columna-numerica', type: 'num' },
-                { targets: '.columna-acciones', orderable: false }
-            ],
-            buttons: [
-                {
-                    extend: 'excelHtml5',
-                    text: 'Exportar a Excel',
-                    title: 'Alumnos',
-                    exportOptions: columnasExport
-                },
-                { extend: 'csv', exportOptions: columnasExport },
-                { extend: 'print', exportOptions: columnasExport }
-            ]
-        });
-    </script>
-</body>
-</html>
+{% block contenido %}
+<h1>Catálogo de alumnos</h1>
+
+<div class="acciones" style="margin-bottom: 1rem;">
+    {% if es_admin %}
+    <a class="boton" href="{% url 'alumno_create' %}">Registrar alumno</a>
+    {% endif %}
+    {% if es_coordinador %}
+    <a class="boton secundario" href="{% url 'inscripcion_alumnos' %}">Inscribir alumno</a>
+    {% endif %}
+</div>
+
+<div class="contenedor">
+    <table id="tabla-alumnos" class="display" style="width:100%">
+        <thead>
+            <tr>
+                <th>Matrícula</th>
+                <th>Nombre</th>
+                <th>Semestre</th>
+                <th>Estatus</th>
+                <th>Carrera</th>
+                <th class="columna-numerica">Materias cursadas</th>
+                <th class="columna-numerica">Promedio general</th>
+                <th class="columna-acciones">Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for a in alumnos %}
+            <tr>
+                <td>{{ a.matricula }}</td>
+                <td>{{ a.nombre }}</td>
+                <td class="numero">{{ a.semestre }}</td>
+                <td>{{ a.get_estatus_display }}</td>
+                <td>{{ a.carrera }}</td>
+                <td class="numero">{{ a.materias_cursadas }}</td>
+                <td class="numero">{% if a.promedio_general is not None %}{{ a.promedio_general }}{% else %}—{% endif %}</td>
+                <td class="acciones">
+                    <div class="acciones">
+                        <a class="boton secundario" href="{% url 'carga_de_alumno' a.matricula %}">Carga</a>
+                        {% if es_coordinador %}
+                        <a class="boton secundario" href="{% url 'alumno_cardex' a.matricula %}">Cardex</a>
+                        <a class="boton" href="{% url 'inscripcion_alumno' a.matricula %}">Inscribir</a>
+                        {% endif %}
+                        {% if es_admin %}
+                        <a class="boton secundario" href="{% url 'alumno_update' a.matricula %}">Editar</a>
+                        <a class="boton peligro" href="{% url 'alumno_delete' a.matricula %}">Baja</a>
+                        {% endif %}
+                    </div>
+                </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="8">Sin registros</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const columnasExport = { columns: [0, 1, 2, 3, 4, 5, 6] };
+    new DataTable('#tabla-alumnos', {
+        pageLength: 10,
+        language: { url: 'https://cdn.datatables.net/plug-ins/2.2.2/i18n/es-MX.json' },
+        dom: 'Bfrtip',
+        columnDefs: [
+            { targets: '.columna-numerica', type: 'num' },
+            { targets: '.columna-acciones', orderable: false, searchable: false }
+        ],
+        buttons: [
+            { extend: 'excelHtml5', text: 'Exportar a Excel', title: 'Alumnos', exportOptions: columnasExport },
+            { extend: 'csv', exportOptions: columnasExport },
+            { extend: 'print', exportOptions: columnasExport }
+        ]
+    });
+</script>
+{% endblock %}

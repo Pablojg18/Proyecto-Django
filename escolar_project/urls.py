@@ -1,27 +1,67 @@
-"""
-URL configuration for escolar_project project.
+"""Rutas del sistema escolar."""
 
-The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/6.1/topics/http/urls/
-Examples:
-Function views
-    1. Add an import:  from my_app import views
-    2. Add a URL to urlpatterns:  path('', views.home, name='home')
-Class-based views
-    1. Add an import:  from other_app.views import Home
-    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
-Including another URLconf
-    1. Import the include() function: from django.urls import include, path
-    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
-"""
 from django.contrib import admin
 from django.urls import path
 from academico import views
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
+    # Sesión
+    path('accounts/login/', views.IniciarSesion.as_view(), name='login'),
+    path('accounts/logout/', views.CerrarSesion.as_view(), name='logout'),
+
+    # Portada
     path('', views.index, name='index'),
-    path('alumnos/', views.alumno_list, name='alumno_list'),
+
+    # Catálogo de alumnos
+    path('alumnos/', views.AlumnoListView.as_view(), name='alumno_list'),
+    path('alumnos/nuevo/', views.AlumnoCreateView.as_view(),
+         name='alumno_create'),
+    path('alumnos/<str:pk>/editar/', views.AlumnoUpdateView.as_view(),
+         name='alumno_update'),
+    path('alumnos/<str:pk>/eliminar/', views.AlumnoDeleteView.as_view(),
+         name='alumno_delete'),
     path('alumnos/<str:matricula>/cardex/', views.alumno_cardex,
          name='alumno_cardex'),
+    path('alumnos/<str:matricula>/carga/', views.carga_de_alumno,
+         name='carga_de_alumno'),
+
+    # Catálogo de carreras
+    path('carreras/', views.CarreraListView.as_view(), name='carrera_list'),
+    path('carreras/nuevo/', views.CarreraCreateView.as_view(),
+         name='carrera_create'),
+    path('carreras/<str:pk>/editar/', views.CarreraUpdateView.as_view(),
+         name='carrera_update'),
+    path('carreras/<str:pk>/eliminar/', views.CarreraDeleteView.as_view(),
+         name='carrera_delete'),
+
+    # Catálogo de materias
+    path('materias/', views.MateriaListView.as_view(), name='materia_list'),
+    path('materias/nuevo/', views.MateriaCreateView.as_view(),
+         name='materia_create'),
+    path('materias/<str:pk>/editar/', views.MateriaUpdateView.as_view(),
+         name='materia_update'),
+    path('materias/<str:pk>/eliminar/', views.MateriaDeleteView.as_view(),
+         name='materia_delete'),
+
+    # Catálogo de grupos
+    path('grupos/', views.GrupoListView.as_view(), name='grupo_list'),
+    path('grupos/nuevo/', views.GrupoCreateView.as_view(), name='grupo_create'),
+    path('grupos/<str:pk>/editar/', views.GrupoUpdateView.as_view(),
+         name='grupo_update'),
+    path('grupos/<str:pk>/eliminar/', views.GrupoDeleteView.as_view(),
+         name='grupo_delete'),
+
+    # Inscripción
+    path('inscripcion/', views.MiInscripcion.as_view(), name='mi_inscripcion'),
+    path('coordinacion/inscripcion/', views.AlumnosParaInscribir.as_view(),
+         name='inscripcion_alumnos'),
+    path('coordinacion/inscripcion/<str:matricula>/',
+         views.InscripcionCoordinador.as_view(), name='inscripcion_alumno'),
+
+    # Carga académica del estudiante
+    path('mi-carga-academica/', views.mi_carga_academica,
+         name='mi_carga_academica'),
+
+    # Administración de Django (reservada a personal con permisos de staff)
+    path('admin/', admin.site.urls),
 ]

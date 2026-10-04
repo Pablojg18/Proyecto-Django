@@ -1,0 +1,24 @@
+{% extends 'academico/base.html' %}
+
+{% block titulo %}{{ titulo|default:'Registro' }}{% endblock %}
+
+{% block contenido %}
+<h1>{{ titulo|default:'Registro' }}</h1>
+<a class="volver" href="{{ volver|default:'/' }}">&larr; Volver</a>
+
+<div class="contenedor" style="max-width: 640px;">
+    <form method="post" novalidate>
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+        {% for field in form %}
+        <p>
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}<span class="ayuda">{{ field.help_text }}</span>{% endif %}
+            {% if field.errors %}<span class="error-campo">{{ field.errors|striptags }}</span>{% endif %}
+        </p>
+        {% endfor %}
+        <button type="submit" class="boton">Guardar</button>
+    </form>
+</div>
+{% endblock %}

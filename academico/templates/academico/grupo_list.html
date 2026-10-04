@@ -1,0 +1,70 @@
+{% extends 'academico/base.html' %}
+
+{% block titulo %}Grupos{% endblock %}
+
+{% block contenido %}
+<h1>Catálogo de grupos</h1>
+
+<div class="acciones" style="margin-bottom: 1rem;">
+    <a class="boton" href="{% url 'grupo_create' %}">Registrar grupo</a>
+</div>
+
+<div class="contenedor">
+    <table id="tabla-grupos" class="display" style="width:100%">
+        <thead>
+            <tr>
+                <th>Materia</th>
+                <th>Carrera</th>
+                <th>Periodo</th>
+                <th>Turno</th>
+                <th>Horario</th>
+                <th>Aula</th>
+                <th class="columna-numerica">Ocupados</th>
+                <th class="columna-numerica">Cupo</th>
+                <th class="columna-numerica">Libres</th>
+                <th class="columna-acciones">Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for g in grupos %}
+            <tr>
+                <td>{{ g.materia.codigo }} – {{ g.materia.nombre }}</td>
+                <td>{{ g.materia.carrera }}</td>
+                <td>{{ g.periodo }}</td>
+                <td>{{ g.get_turno_display }}</td>
+                <td>{{ g.horario }}</td>
+                <td>{{ g.aula|default:"—" }}</td>
+                <td class="numero">{{ g.num_alumnos }}</td>
+                <td class="numero">{{ g.cupo }}</td>
+                <td class="numero">{{ g.lugares_disponibles }}</td>
+                <td>
+                    <div class="acciones">
+                        <a class="boton secundario" href="{% url 'grupo_update' g.pk %}">Editar</a>
+                        <a class="boton peligro" href="{% url 'grupo_delete' g.pk %}">Baja</a>
+                    </div>
+                </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="10">Sin registros</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    new DataTable('#tabla-grupos', {
+        pageLength: 15,
+        language: { url: 'https://cdn.datatables.net/plug-ins/2.2.2/i18n/es-MX.json' },
+        dom: 'Bfrtip',
+        columnDefs: [{ targets: '.columna-numerica', type: 'num' },
+                     { targets: '.columna-acciones', orderable: false, searchable: false }],
+        buttons: [
+            { extend: 'excelHtml5', text: 'Exportar a Excel', title: 'Grupos' },
+            { extend: 'csv' },
+            { extend: 'print' }
+        ]
+    });
+</script>
+{% endblock %}

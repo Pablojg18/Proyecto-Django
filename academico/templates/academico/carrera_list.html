@@ -1,0 +1,68 @@
+{% extends 'academico/base.html' %}
+
+{% block titulo %}Carreras{% endblock %}
+
+{% block contenido %}
+<h1>Catálogo de carreras</h1>
+
+{% if es_admin %}
+<div class="acciones" style="margin-bottom: 1rem;">
+    <a class="boton" href="{% url 'carrera_create' %}">Registrar carrera</a>
+</div>
+{% endif %}
+
+<div class="contenedor">
+    <table id="tabla-carreras" class="display" style="width:100%">
+        <thead>
+            <tr>
+                <th>Código</th>
+                <th>Nombre</th>
+                <th class="columna-numerica">Duración (semestres)</th>
+                <th class="columna-numerica">Créditos</th>
+                <th class="columna-numerica">Materias</th>
+                <th class="columna-numerica">Alumnos</th>
+                {% if es_admin %}<th class="columna-acciones">Acciones</th>{% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for c in carreras %}
+            <tr>
+                <td>{{ c.codigo }}</td>
+                <td>{{ c.nombre }}</td>
+                <td class="numero">{{ c.duracion }}</td>
+                <td class="numero">{{ c.creditos }}</td>
+                <td class="numero">{{ c.total_materias }}</td>
+                <td class="numero">{{ c.total_alumnos }}</td>
+                {% if es_admin %}
+                <td>
+                    <div class="acciones">
+                        <a class="boton secundario" href="{% url 'carrera_update' c.codigo %}">Editar</a>
+                        <a class="boton peligro" href="{% url 'carrera_delete' c.codigo %}">Baja</a>
+                    </div>
+                </td>
+                {% endif %}
+            </tr>
+            {% empty %}
+            <tr><td colspan="7">Sin registros</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    new DataTable('#tabla-carreras', {
+        pageLength: 10,
+        language: { url: 'https://cdn.datatables.net/plug-ins/2.2.2/i18n/es-MX.json' },
+        dom: 'Bfrtip',
+        columnDefs: [{ targets: '.columna-numerica', type: 'num' },
+                     { targets: '.columna-acciones', orderable: false, searchable: false }],
+        buttons: [
+            { extend: 'excelHtml5', text: 'Exportar a Excel', title: 'Carreras' },
+            { extend: 'csv' },
+            { extend: 'print' }
+        ]
+    });
+</script>
+{% endblock %}

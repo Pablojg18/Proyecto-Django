@@ -1,23 +1,19 @@
-from django.shortcuts import render, redirect, get_object_or_404
+"""Captura de calificaciones finales (funcionalidad de la tarea anterior)."""
+
 from django.contrib import messages
+from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
-from .forms import CalificacionFormSet
-from .models import Alumno, Calificacion
+
+from ..forms import CalificacionFormSet
+from ..models import Alumno, Calificacion
+from ..permisos import requiere_rol
+
+ROLES_COORDINADOR = ('COORDINADOR',)
 
 
-def index(request):
-    return render(request, 'academico/index.html')
-
-
-def alumno_list(request):
-    contexto = {
-        'alumnos': Alumno.objects.select_related('carrera')
-        .prefetch_related('calificaciones').all(),
-    }
-    return render(request, 'academico/alumno_list.html', contexto)
-
-
+@requiere_rol(*ROLES_COORDINADOR)
 def alumno_cardex(request, matricula):
+    """Muestra y guarda las calificaciones finales de un alumno."""
     alumno = get_object_or_404(
         Alumno.objects.select_related('carrera'), matricula=matricula
     )

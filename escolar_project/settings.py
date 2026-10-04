@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
 from pathlib import Path
+from decimal import Decimal
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -62,6 +63,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'academico.context_processors.rol_actual',
             ],
         },
     },
@@ -107,13 +109,32 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+# Contraseña mínima que el administrador asigna al crear el usuario de un alumno.
+LONGITUD_MINIMA_PASSWORD_INICIAL = 6
+
+
+# Authentication
+# https://docs.djangoproject.com/en/6.1/topics/auth/default/
+
+LOGIN_URL = 'login'
+LOGIN_REDIRECT_URL = 'index'
+LOGOUT_REDIRECT_URL = 'login'
+
+
+# Periodo académico vigente: contra este valor se validan las inscripciones
+# y se define la "carga académica activa" de cada alumno.
+PERIODO_ACTUAL = '2026-1'
+
+# Calificación mínima para considerar una materia como aprobada.
+CALIFICACION_APROBADA = Decimal('6.0')
+
 
 # Internationalization
 # https://docs.djangoproject.com/en/6.1/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = 'es-mx'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'America/Mexico_City'
 
 USE_I18N = True
 

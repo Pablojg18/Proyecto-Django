@@ -1,0 +1,16 @@
+{% extends 'academico/base.html' %}
+
+{% block titulo %}Confirmar baja{% endblock %}
+
+{% block contenido %}
+<h1>Confirmar baja</h1>
+<a class="volver" href="{{ volver }}">&larr; Volver</a>
+
+<div class="contenedor">
+    <p>¿Seguro que deseas eliminar <strong>{{ object }}</strong>? Esta acción no se puede deshacer.</p>
+    <form method="post">
+        {% csrf_token %}
+        <button type="submit" class="boton peligro">Sí, eliminar</button>
+    </form>
+</div>
+{% endblock %}

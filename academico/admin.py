@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Carrera, Materia, Grupo, Alumno, Calificacion
+from .models import (Alumno, Calificacion, Carrera, Grupo, Materia, Perfil)
 
 
 @admin.register(Carrera)
@@ -40,3 +40,10 @@ class CalificacionAdmin(admin.ModelAdmin):
     list_display = ['alumno', 'grupo', 'valor', 'fecha_inscripcion', 'fecha_captura']
     list_filter = ['grupo']
     search_fields = ['alumno__matricula', 'alumno__nombre', 'grupo__periodo']
+
+
+@admin.register(Perfil)
+class PerfilAdmin(admin.ModelAdmin):
+    list_display = ['usuario', 'rol', 'alumno']
+    list_filter = ['rol']
+    search_fields = ['usuario__username', 'alumno__matricula', 'alumno__nombre']

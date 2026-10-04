@@ -1,0 +1,40 @@
+{% extends 'academico/base.html' %}
+
+{% block titulo %}Iniciar sesión{% endblock %}
+
+{% block contenido %}
+<h1>Iniciar sesión</h1>
+
+<div class="contenedor" style="max-width: 420px;">
+    {% if form.errors %}
+    <ul class="mensajes">
+        <li class="error">Usuario o contraseña incorrectos. Inténtalo de nuevo.</li>
+    </ul>
+    {% endif %}
+    <form method="post">
+        {% csrf_token %}
+        <p>
+            <label for="id_username">Usuario</label>
+            <input type="text" name="username" id="id_username" autofocus
+                   required autocomplete="username">
+        </p>
+        <p>
+            <label for="id_password">Contraseña</label>
+            <input type="password" name="password" id="id_password" required
+                   autocomplete="current-password">
+        </p>
+        <input type="hidden" name="next" value="{{ next }}">
+        <button type="submit" class="boton">Entrar</button>
+    </form>
+</div>
+
+<div class="contenedor" style="max-width: 420px;">
+    <h2>Roles del sistema</h2>
+    <ul>
+        <li><strong>Administrador:</strong> alta de alumnos, carreras y materias.</li>
+        <li><strong>Coordinador:</strong> grupos, inscripción de alumnos, carga académica y calificaciones.</li>
+        <li><strong>Estudiante:</strong> inscripción propia y consulta de su carga académica.</li>
+    </ul>
+    <p class="ayuda">Los estudiantes usan su número de matrícula como usuario.</p>
+</div>
+{% endblock %}
