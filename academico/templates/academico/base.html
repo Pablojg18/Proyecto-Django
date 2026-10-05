@@ -63,6 +63,14 @@
         ul.checkboxes { list-style: none; margin: 0; padding: 0; }
         ul.checkboxes li { border: 1px solid #e2e2e2; border-radius: 6px; padding: .5rem .7rem; margin-bottom: .4rem; }
         ul.checkboxes label { font-weight: 400; }
+        .rejilla-tarjetas { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+        .tarjeta-operacion { background: #fff; border-radius: 8px; padding: 1rem 1.2rem; box-shadow: 0 1px 3px rgba(0,0,0,.12); display: flex; flex-direction: column; }
+        .tarjeta-operacion h2 { border-bottom: 2px solid var(--verde); padding-bottom: .2rem; }
+        .tarjeta-operacion p { font-size: .9rem; color: #444; flex: 1; }
+        .tarjeta-operacion .boton { align-self: flex-start; }
+        .selector-periodo { display: flex; align-items: center; gap: .4rem; font-size: .88rem; }
+        .selector-periodo select { padding: .25rem .4rem; border-radius: 4px; border: 1px solid #8aa; }
+        .selector-periodo .vigente { color: #9fe8bf; font-weight: 600; }
     </style>
 </head>
 <body>
@@ -70,21 +78,27 @@
 <header>
     <a class="marca" href="{% url 'index' %}">Sistema escolar</a>
     <nav>
-        {% if es_admin or es_coordinador %}
-            <div class="grupo">
+        <div class="grupo">
+            <a href="{% url 'index' %}">Inicio</a>
+            {% if es_administracion %}
+                <a href="{% url 'usuario_list' %}">Usuarios</a>
                 <a href="{% url 'alumno_list' %}">Alumnos</a>
-                <a href="{% url 'carrera_list' %}">Carreras</a>
+                <a href="{% url 'inscripcion_alumnos' %}">Inscripción</a>
+            {% endif %}
+        </div>
+        {% if es_administracion %}
+            <div class="grupo">
+                <a href="{% url 'periodo_list' %}">Periodos</a>
+                <a href="{% url 'grupo_list' %}">Grupos</a>
                 <a href="{% url 'materia_list' %}">Materias</a>
+                <a href="{% url 'carrera_list' %}">Carreras</a>
             </div>
-        {% endif %}
-        {% if es_coordinador %}
-            <a href="{% url 'grupo_list' %}">Grupos</a>
-            <a href="{% url 'inscripcion_alumnos' %}">Inscribir alumno</a>
         {% endif %}
         {% if es_estudiante %}
             <div class="grupo">
                 <a href="{% url 'mi_inscripcion' %}">Inscribirme</a>
-                <a href="{% url 'mi_carga_academica' %}">Mi carga académica</a>
+                <a href="{% url 'mi_carga_academica' %}">Carga académica</a>
+                <a href="{% url 'mi_cardex' %}">Mi cardex</a>
             </div>
         {% endif %}
         {% if es_admin %}
@@ -92,6 +106,21 @@
         {% endif %}
     </nav>
     <div class="sesion">
+        {% if es_administracion and periodos %}
+            <form method="post" action="{% url 'periodo_activar' %}" class="selector-periodo">
+                {% csrf_token %}
+                <input type="hidden" name="siguiente" value="{{ request.get_full_path }}">
+                <label for="selector-periodo">Periodo</label>
+                <select name="periodo" id="selector-periodo" onchange="this.form.submit()">
+                    {% for p in periodos %}
+                        <option value="{{ p.pk }}" {% if p.pk == periodo_activo.pk %}selected{% endif %}>{{ p.nombre }}{% if p.activo %} (vigente){% endif %}</option>
+                    {% endfor %}
+                </select>
+                <noscript><button type="submit" class="salir">Ir</button></noscript>
+            </form>
+        {% elif periodo_activo %}
+            <span class="selector-periodo">Periodo: <span class="vigente">{{ periodo_activo.nombre }}</span></span>
+        {% endif %}
         {% if perfil %}<span class="rol">{{ perfil.get_rol_display }}</span>{% endif %}
         <span>{{ user.get_username }}</span>
         <form method="post" action="{% url 'logout' %}">

@@ -1,6 +1,5 @@
 """Inscripción de alumnos: por parte del coordinador y del propio estudiante."""
 
-from django.conf import settings
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.db.models import Q
@@ -8,19 +7,19 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.generic import ListView, View
 
 from ..forms import FiltroAlumnosForm, InscripcionForm, grupos_inscribibles
-from ..models import Alumno
+from ..models import Alumno, Periodo
 from ..permisos import RolRequeridoMixin, perfil_de
 from ..services import ErrorInscripcion, desinscribir_alumno, inscribir_alumno
 
 ROLES_ESTUDIANTE = ('ESTUDIANTE',)
-ROLES_COORDINADOR = ('COORDINADOR',)
+ROLES_COORDINACION = ('ADMINISTRADOR', 'COORDINADOR')
 
 
 class AlumnosParaInscribir(RolRequeridoMixin, ListView):
     """Paso 1 del coordinador: elegir al alumno a inscribir."""
 
     model = Alumno
-    roles_permitidos = ROLES_COORDINADOR
+    roles_permitidos = ROLES_COORDINACION
     template_name = 'academico/inscripcion_alumnos.html'
     context_object_name = 'alumnos'
 
@@ -43,7 +42,7 @@ class AlumnosParaInscribir(RolRequeridoMixin, ListView):
     def get_context_data(self, **kwargs):
         contexto = super().get_context_data(**kwargs)
         contexto['filtro'] = self.filtro
-        contexto['periodo_actual'] = settings.PERIODO_ACTUAL
+        contexto['periodo_actual'] = Periodo.actual()
         return contexto
 
 
@@ -62,7 +61,7 @@ class InscripcionBase(RolRequeridoMixin, View):
 
     def get_context_data(self, alumno, form=None, opciones=None):
         if opciones is None:
-            opciones = grupos_inscribibles(alumno, settings.PERIODO_ACTUAL)
+            opciones = grupos_inscribibles(alumno, Periodo.actual())
         if form is None:
             form = InscripcionForm(opciones=opciones)
         carga = list(alumno.carga_academica())
@@ -72,7 +71,7 @@ class InscripcionBase(RolRequeridoMixin, View):
             'opciones': opciones,
             'carga_actual': carga,
             'quitar_ids': [c.pk for c in carga],
-            'periodo_actual': settings.PERIODO_ACTUAL,
+            'periodo_actual': Periodo.actual(),
             'forzar': self.forzar,
             'titulo': ('Inscribir alumno' if self.forzar
                        else 'Inscripción de materias'),
@@ -89,7 +88,7 @@ class InscripcionBase(RolRequeridoMixin, View):
         if self.forzar and 'quitar' in request.POST:
             return self.quitar_inscripciones(request, alumno)
 
-        opciones = grupos_inscribibles(alumno, settings.PERIODO_ACTUAL)
+        opciones = grupos_inscribibles(alumno, Periodo.actual())
         form = InscripcionForm(request.POST, opciones=opciones)
         if form.is_valid():
             try:
@@ -122,7 +121,7 @@ class InscripcionBase(RolRequeridoMixin, View):
 class InscripcionCoordinador(InscripcionBase):
     """Paso 2 del coordinador: elegir las materias de un alumno."""
 
-    roles_permitidos = ROLES_COORDINADOR
+    roles_permitidos = ROLES_COORDINACION
     forzar = True
 
     def get_alumno(self, request, matricula):

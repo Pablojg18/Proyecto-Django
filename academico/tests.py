@@ -7,10 +7,12 @@ from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
 
-from .models import Alumno, Calificacion, Carrera, Grupo, Materia, Perfil
+from .models import (Alumno, Calificacion, Carrera, Grupo, Materia, Perfil,
+                     Periodo)
 from .services import ErrorInscripcion, desinscribir_alumno, inscribir_alumno
 
 PERIODO = settings.PERIODO_ACTUAL
+PERIODO_ANTERIOR = '2025-2'
 
 
 class BaseSistema(TestCase):
@@ -18,6 +20,12 @@ class BaseSistema(TestCase):
 
     @classmethod
     def setUpTestData(cls):
+        cls.periodo, _ = Periodo.objects.get_or_create(
+            nombre=PERIODO, defaults={'activo': True})
+        cls.periodo.activar()
+        cls.periodo_anterior = Periodo.objects.create(
+            nombre=PERIODO_ANTERIOR, activo=False)
+
         cls.carrera = Carrera.objects.create(
             codigo='ISC', nombre='Ingeniería en Sistemas', duracion=8,
             creditos=300)
@@ -35,14 +43,14 @@ class BaseSistema(TestCase):
             carrera=cls.otra_carrera)
 
         cls.grupo_1 = Grupo.objects.create(
-            materia=cls.materia_1, periodo=PERIODO, cupo=30, num_alumnos=0,
+            materia=cls.materia_1, periodo=cls.periodo, cupo=30, num_alumnos=0,
             horario='L-V 08:00-09:30', aula='A-101', turno='MAT')
         cls.grupo_2 = Grupo.objects.create(
-            materia=cls.materia_2, periodo=PERIODO, cupo=1, num_alumnos=0,
+            materia=cls.materia_2, periodo=cls.periodo, cupo=1, num_alumnos=0,
             horario='L-V 10:00-11:30', aula='B-204', turno='VES')
         cls.grupo_ajeno = Grupo.objects.create(
-            materia=cls.materia_ajena, periodo=PERIODO, cupo=30, num_alumnos=0,
-            horario='L-V 12:00-13:30', aula='C-101', turno='MAT')
+            materia=cls.materia_ajena, periodo=cls.periodo, cupo=30,
+            num_alumnos=0, horario='L-V 12:00-13:30', aula='C-101', turno='MAT')
 
         cls.alumno = Alumno.objects.create(
             matricula='20260001', nombre='Ana López', semestre=2,
@@ -80,8 +88,9 @@ class PruebasSesion(BaseSistema):
         self.assertNotIn('_auth_user_id', self.client.session)
 
     def test_sin_sesion_toda_operacion_exige_login(self):
-        for url in ['index', 'alumno_list', 'grupo_list', 'mi_inscripcion',
-                    'mi_carga_academica', 'alumno_create', 'carrera_create']:
+        for url in ['index', 'alumno_list', 'grupo_list', 'periodo_list',
+                    'usuario_list', 'mi_inscripcion', 'mi_carga_academica',
+                    'mi_cardex', 'usuario_create_alumno', 'carrera_create']:
             with self.subTest(url=url):
                 respuesta = self.client.get(reverse(url))
                 self.assertEqual(respuesta.status_code, 302)
@@ -100,32 +109,67 @@ class PruebasPermisosPorRol(BaseSistema):
 
     def test_administrador_administra_los_catalogos(self):
         self.client.force_login(self.admin)
-        for url in ['alumno_list', 'alumno_create', 'carrera_list',
-                    'carrera_create', 'materia_list', 'materia_create']:
+        for url in ['alumno_list', 'carrera_list', 'carrera_create',
+                    'materia_list', 'materia_create', 'grupo_list',
+                    'grupo_create', 'periodo_list', 'periodo_create',
+                    'usuario_list', 'usuario_create', 'usuario_create_alumno',
+                    'usuario_create_personal', 'inscripcion_alumnos']:
             with self.subTest(url=url):
                 respuesta = self.obtener(reverse(url))
                 self.assertEqual(respuesta.status_code, 200)
 
-    def test_coordinador_gestiona_grupos_pero_no_da_alta_de_alumnos(self):
+    def test_administrador_todas_las_funciones_son_suyas(self):
+        """El administrador también captura calificaciones y consulta cargas."""
+        self.client.force_login(self.admin)
+        url = reverse('alumno_cardex', args=[self.alumno.matricula])
+        self.assertEqual(self.client.get(url).status_code, 200)
+        self.assertEqual(
+            self.client.get(
+                reverse('carga_de_alumno', args=[self.alumno.matricula])
+            ).status_code, 200)
+        self.assertEqual(
+            self.client.get(
+                reverse('inscripcion_alumno', args=[self.alumno.matricula])
+            ).status_code, 200)
+
+    def test_alta_de_alumno_desde_catalogos_va_a_usuarios(self):
+        """`/alumnos/nuevo/` ya no da de alta: lleva a la pantalla de usuarios."""
+        self.client.force_login(self.admin)
+        respuesta = self.client.get(reverse('alumno_create'))
+        self.assertRedirects(respuesta, reverse('usuario_create_alumno'))
+
+    def test_coordinador_gestiona_alumnos_desde_usuarios(self):
+        """El coordinador da de alta y edita alumnos, pero no catálogos."""
         self.client.force_login(self.coordinador)
-        for url in ['grupo_list', 'grupo_create', 'inscripcion_alumnos']:
+        for url in ['grupo_list', 'grupo_create', 'periodo_list',
+                    'periodo_create', 'inscripcion_alumnos', 'usuario_list',
+                    'usuario_create', 'usuario_create_alumno', 'alumno_list']:
             with self.subTest(url=url):
                 self.assertEqual(self.obtener(reverse(url)).status_code, 200)
 
-        for url in ['alumno_create', 'carrera_create', 'materia_create']:
+        self.assertRedirects(
+            self.obtener(reverse('alumno_create')),
+            reverse('usuario_create_alumno'))
+
+        # La edición del alumno vive en Usuarios, no en el catálogo.
+        for url in ['carrera_create', 'materia_create']:
             with self.subTest(url=url):
                 respuesta = self.obtener(reverse(url))
                 self.assertRedirects(respuesta, reverse('index'))
 
+        respuesta = self.obtener(
+            reverse('alumno_update', args=[self.alumno.matricula]))
+        self.assertRedirects(respuesta, reverse('index'))
+
     def test_estudiante_solo_accede_a_sus_operaciones(self):
         self.client.force_login(self.estudiante)
-        self.assertEqual(
-            self.obtener(reverse('mi_inscripcion')).status_code, 200)
-        self.assertEqual(
-            self.obtener(reverse('mi_carga_academica')).status_code, 200)
+        for url in ['mi_inscripcion', 'mi_carga_academica', 'mi_cardex']:
+            with self.subTest(url=url):
+                self.assertEqual(self.obtener(reverse(url)).status_code, 200)
 
         for url in ['alumno_list', 'carrera_list', 'materia_list',
                     'grupo_list', 'grupo_create', 'alumno_create',
+                    'usuario_list', 'usuario_create', 'periodo_list',
                     'inscripcion_alumnos', 'carrera_create', 'materia_create']:
             with self.subTest(url=url):
                 respuesta = self.obtener(reverse(url))
@@ -136,10 +180,24 @@ class PruebasPermisosPorRol(BaseSistema):
         url = reverse('alumno_cardex', args=[self.alumno.matricula])
         self.assertRedirects(self.client.get(url), reverse('index'))
 
-    def test_solo_coordinador_modifica_calificaciones(self):
-        self.client.force_login(self.coordinador)
-        url = reverse('alumno_cardex', args=[self.alumno.matricula])
-        self.assertEqual(self.client.get(url).status_code, 200)
+    def test_mi_cardex_del_estudiante_es_solo_lectura(self):
+        Calificacion.objects.create(alumno=self.alumno, grupo=self.grupo_1,
+                                    valor=Decimal('9.0'))
+        self.client.force_login(self.estudiante)
+        respuesta = self.client.get(reverse('mi_cardex'))
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertTrue(respuesta.context['solo_lectura'])
+        self.assertNotContains(respuesta, 'Guardar calificaciones')
+        self.assertContains(respuesta, 'Matemáticas I')
+        self.assertContains(respuesta, 'Aprobada')
+
+    def test_administracion_modifica_calificaciones(self):
+        for usuario in (self.admin, self.coordinador):
+            with self.subTest(usuario=usuario.username):
+                self.client.force_login(usuario)
+                url = reverse('alumno_cardex', args=[self.alumno.matricula])
+                self.assertEqual(self.client.get(url).status_code, 200)
 
     def test_usuario_sin_rol_no_accede_a_operaciones(self):
         usuario = User.objects.create_user(username='sinerol', password='x')
@@ -153,8 +211,8 @@ class PruebasPermisosPorRol(BaseSistema):
         superusuario = User.objects.create_superuser(
             username='super', password='clave', email='s@e.com')
         self.client.force_login(superusuario)
-        for url in ['grupo_list', 'inscripcion_alumnos', 'alumno_create',
-                    'alumno_list']:
+        for url in ['grupo_list', 'inscripcion_alumnos', 'usuario_list',
+                    'periodo_list', 'alumno_list']:
             with self.subTest(url=url):
                 self.assertEqual(self.client.get(reverse(url)).status_code, 200)
 
@@ -175,8 +233,8 @@ class PruebasCruds(BaseSistema):
             'especialidad': '', 'estatus': 'ACTIVO',
             'password_inicial': 'alumno123',
         }
-        respuesta = self.client.post(reverse('alumno_create'), datos)
-        self.assertRedirects(respuesta, reverse('alumno_list'))
+        respuesta = self.client.post(reverse('usuario_create_alumno'), datos)
+        self.assertRedirects(respuesta, reverse('usuario_list'))
 
         alumno = Alumno.objects.get(matricula='20260009')
         perfil = Perfil.objects.get(usuario__username='20260009')
@@ -191,7 +249,7 @@ class PruebasCruds(BaseSistema):
             'matricula': '20260010', 'nombre': 'Sin clave',
             'carrera': self.carrera.pk, 'semestre': 1, 'estatus': 'ACTIVO',
         }
-        respuesta = self.client.post(reverse('alumno_create'), datos)
+        respuesta = self.client.post(reverse('usuario_create_alumno'), datos)
         self.assertEqual(respuesta.status_code, 200)
         self.assertFalse(Alumno.objects.filter(matricula='20260010').exists())
 
@@ -225,13 +283,30 @@ class PruebasCruds(BaseSistema):
     def test_coordinador_alta_grupo_con_materia_del_periodo(self):
         self.client.force_login(self.coordinador)
         respuesta = self.client.post(reverse('grupo_create'), {
-            'materia': self.materia_1.pk, 'periodo': PERIODO,
+            'materia': self.materia_1.pk, 'periodo': self.periodo.pk,
             'turno': 'MAT', 'horario': 'L-V 07:00-08:30', 'aula': 'A-102',
             'cupo': 25, 'num_alumnos': 0,
         })
         self.assertRedirects(respuesta, reverse('grupo_list'))
-        self.assertTrue(
-            Grupo.objects.filter(horario='L-V 07:00-08:30').exists())
+        grupo = Grupo.objects.get(horario='L-V 07:00-08:30')
+        self.assertEqual(grupo.periodo_id, self.periodo.pk)
+
+    def test_alta_de_grupo_preselecciona_el_periodo_vigente(self):
+        self.client.force_login(self.coordinador)
+        respuesta = self.client.get(reverse('grupo_create'))
+        self.assertEqual(respuesta.context['form'].initial['periodo'],
+                         self.periodo.pk)
+
+    def test_alta_de_periodo_desde_el_catalogo(self):
+        self.client.force_login(self.coordinador)
+        respuesta = self.client.post(reverse('periodo_create'),
+                                     {'nombre': '2026-2', 'activo': 'on'})
+        self.assertRedirects(respuesta, reverse('periodo_list'))
+        nuevo = Periodo.objects.get(nombre='2026-2')
+        self.assertTrue(nuevo.activo)
+        self.periodo.refresh_from_db()
+        self.assertFalse(self.periodo.activo)
+        self.assertEqual(Periodo.actual().pk, nuevo.pk)
 
     def test_baja_de_alumno_borra_su_usuario(self):
         self.client.force_login(self.admin)
@@ -260,7 +335,7 @@ class PruebasCruds(BaseSistema):
             'carrera': self.carrera.pk, 'semestre': 1,
             'estatus': 'ACTIVO', 'password_inicial': 'alumno123',
         }
-        respuesta = self.client.post(reverse('alumno_create'), datos)
+        respuesta = self.client.post(reverse('usuario_create_alumno'), datos)
         self.assertEqual(respuesta.status_code, 200)
         self.assertContains(respuesta, 'Ya existe un usuario con esta matrícula')
 
@@ -359,11 +434,32 @@ class PruebasInscripcion(BaseSistema):
             inscribir_alumno(self.alumno, [self.grupo_2])
 
     def test_no_se_puede_inscribir_en_grupo_de_otro_periodo(self):
-        Grupo.objects.create(materia=self.materia_1, periodo='2025-2', cupo=10,
-                             num_alumnos=0, horario='L-V 09:00-10:30')
-        grupo_antiguo = Grupo.objects.get(periodo='2025-2')
+        grupo_antiguo = Grupo.objects.create(
+            materia=self.materia_1, periodo=self.periodo_anterior, cupo=10,
+            num_alumnos=0, horario='L-V 09:00-10:30')
         with self.assertRaisesMessage(ErrorInscripcion, 'inscripción está abierta'):
             inscribir_alumno(self.alumno, [grupo_antiguo])
+
+    def test_al_cambiar_el_periodo_vigente_se_abre_la_inscripcion(self):
+        """Alumno con carga en 2026-1 puede inscribirse en el nuevo periodo."""
+        Calificacion.objects.create(alumno=self.alumno, grupo=self.grupo_1,
+                                    valor=Decimal('8.0'))
+        Grupo.objects.filter(pk=self.grupo_1.pk).update(num_alumnos=1)
+
+        siguiente = Periodo.objects.create(nombre='2026-2', activo=False)
+        materia_nueva = Materia.objects.create(
+            codigo='MAT103', nombre='Matemáticas III', unidades=4,
+            creditos=5, carrera=self.carrera)
+        grupo_nuevo = Grupo.objects.create(
+            materia=materia_nueva, periodo=siguiente, cupo=10, num_alumnos=0,
+            horario='L-V 08:00-09:30', aula='A-101', turno='MAT')
+
+        Periodo.objects.get(pk=siguiente.pk).activar()
+
+        inscribir_alumno(self.alumno, [grupo_nuevo])
+        self.assertTrue(
+            Calificacion.objects.filter(alumno=self.alumno,
+                                        grupo=grupo_nuevo).exists())
 
     def test_la_inscripcion_es_atomica(self):
         """Si un grupo falla, ninguno de los seleccionados se inscribe."""
@@ -499,3 +595,194 @@ class PruebasCardex(BaseSistema):
         self.assertEqual(respuesta.status_code, 200)
         self.assertEqual(
             Calificacion.objects.get(grupo=self.grupo_1).valor, None)
+
+
+class PruebasPeriodos(BaseSistema):
+    def test_solo_un_periodo_puede_estar_activo(self):
+        nuevo = Periodo.objects.create(nombre='2026-2', activo=True)
+
+        self.periodo.refresh_from_db()
+        self.periodo_anterior.refresh_from_db()
+        self.assertFalse(self.periodo.activo)
+        self.assertFalse(self.periodo_anterior.activo)
+        self.assertEqual(Periodo.actual().pk, nuevo.pk)
+
+    def test_activar_desde_la_pantalla(self):
+        self.client.force_login(self.coordinador)
+        respuesta = self.client.post(reverse('periodo_activar'), {
+            'periodo': self.periodo_anterior.pk,
+            'siguiente': reverse('periodo_list'),
+        })
+
+        self.assertRedirects(respuesta, reverse('periodo_list'))
+        self.assertEqual(Periodo.actual().pk, self.periodo_anterior.pk)
+
+    def test_el_selector_del_encabezado_devuelve_a_la_pagina_actual(self):
+        self.client.force_login(self.coordinador)
+        respuesta = self.client.post(reverse('periodo_activar'), {
+            'periodo': self.periodo_anterior.pk,
+            'siguiente': reverse('grupo_list'),
+        })
+        self.assertRedirects(respuesta, reverse('grupo_list'))
+
+    def test_el_periodo_activo_aparece_en_el_encabezado(self):
+        self.client.force_login(self.coordinador)
+        respuesta = self.client.get(reverse('grupo_list'))
+
+        self.assertEqual(respuesta.context['periodo_activo'], self.periodo)
+        self.assertContains(respuesta, self.periodo.nombre)
+
+    def test_el_estudiante_solo_ve_el_periodo_sin_selector(self):
+        self.client.force_login(self.estudiante)
+        respuesta = self.client.get(reverse('mi_inscripcion'))
+
+        self.assertContains(respuesta, self.periodo.nombre)
+        self.assertNotContains(respuesta, reverse('periodo_activar'))
+
+    def test_el_periodo_no_se_puede_borrar_si_tiene_grupos(self):
+        self.client.force_login(self.coordinador)
+        self.assertEqual(
+            self.client.get(
+                reverse('periodo_delete', args=[self.periodo.pk])).status_code,
+            200)
+
+        respuesta = self.client.post(
+            reverse('periodo_delete', args=[self.periodo.pk]), follow=True)
+
+        self.assertRedirects(respuesta, reverse('periodo_list'))
+        self.assertContains(respuesta, 'no se puede eliminar')
+        self.assertTrue(Periodo.objects.filter(pk=self.periodo.pk).exists())
+
+    def test_un_periodo_sin_grupos_si_se_borra(self):
+        self.client.force_login(self.coordinador)
+        vacio = Periodo.objects.create(nombre='2026-3', activo=False)
+
+        self.client.post(reverse('periodo_delete', args=[vacio.pk]))
+
+        self.assertFalse(Periodo.objects.filter(pk=vacio.pk).exists())
+
+
+class PruebasUsuarios(BaseSistema):
+    def test_listado_muestra_alumnos_y_personal(self):
+        self.client.force_login(self.admin)
+        respuesta = self.client.get(reverse('usuario_list'))
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(respuesta, self.coordinador.username)
+        self.assertContains(respuesta, self.alumno.matricula)
+
+    def test_alta_de_personal_como_administrador(self):
+        self.client.force_login(self.admin)
+        respuesta = self.client.post(reverse('usuario_create_personal'), {
+            'username': 'nuevoadmin', 'nombre': 'Nueva Jefa',
+            'rol': 'ADMINISTRADOR', 'password_inicial': 'clave-de-prueba',
+        })
+
+        self.assertRedirects(respuesta, reverse('usuario_list'))
+        perfil = Perfil.objects.get(usuario__username='nuevoadmin')
+        self.assertEqual(perfil.rol, 'ADMINISTRADOR')
+        self.assertTrue(self.client.login(username='nuevoadmin',
+                                          password='clave-de-prueba'))
+
+    def test_el_coordinador_no_puede_crear_administradores(self):
+        self.client.force_login(self.coordinador)
+        respuesta = self.client.get(reverse('usuario_create_personal'))
+        roles = [codigo for codigo, _ in respuesta.context['form'].fields['rol'].choices]
+        self.assertNotIn('ADMINISTRADOR', roles)
+        self.assertIn('COORDINADOR', roles)
+
+        respuesta = self.client.post(reverse('usuario_create_personal'), {
+            'username': 'intruso', 'nombre': 'Intruso',
+            'rol': 'ADMINISTRADOR', 'password_inicial': 'clave-de-prueba',
+        })
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertFalse(User.objects.filter(username='intruso').exists())
+
+    def test_el_formulario_de_edicion_se_abre_para_cualquier_usuario(self):
+        """También para un superusuario que todavía no tiene Perfil."""
+        self.client.force_login(self.admin)
+        for usuario in [self.coordinador, self.estudiante]:
+            with self.subTest(usuario=usuario.username):
+                respuesta = self.client.get(
+                    reverse('usuario_update', args=[usuario.pk]))
+                self.assertEqual(respuesta.status_code, 200)
+                self.assertEqual(respuesta.context['usuario'], usuario)
+
+        superusuario = User.objects.create_superuser(
+            username='root', password='clave-de-prueba', email='root@escuela.mx')
+        respuesta = self.client.get(
+            reverse('usuario_update', args=[superusuario.pk]))
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.context['usuario'], superusuario)
+        self.assertIsNone(respuesta.context['perfil'])
+
+    def test_cambio_de_rol_y_bloqueo_de_acceso(self):
+        self.client.force_login(self.admin)
+        respuesta = self.client.post(
+            reverse('usuario_update', args=[self.coordinador.pk]),
+            {'first_name': 'Coordinación General', 'rol': 'COORDINADOR',
+             'is_active': ''},
+        )
+
+        self.assertRedirects(respuesta, reverse('usuario_list'))
+        self.coordinador.refresh_from_db()
+        self.assertEqual(self.coordinador.first_name, 'Coordinación General')
+        self.assertFalse(self.coordinador.is_active)
+
+    def test_el_administrador_tambien_puede_darse_de_baja_usuarios(self):
+        self.client.force_login(self.admin)
+        self.client.post(reverse('usuario_create_personal'), {
+            'username': 'temporal', 'nombre': 'Temporal',
+            'rol': 'COORDINADOR', 'password_inicial': 'clave-de-prueba',
+        })
+        temporal = User.objects.get(username='temporal')
+
+        self.client.post(reverse('usuario_delete', args=[temporal.pk]))
+        self.assertFalse(User.objects.filter(username='temporal').exists())
+
+    def test_no_se_borra_el_usuario_de_un_alumno(self):
+        self.client.force_login(self.admin)
+        respuesta = self.client.post(
+            reverse('usuario_delete', args=[self.estudiante.pk]), follow=True)
+
+        self.assertRedirects(respuesta, reverse('usuario_list'))
+        self.assertTrue(User.objects.filter(pk=self.estudiante.pk).exists())
+
+    def test_asignar_contrasena_a_alumno_existente(self):
+        self.client.force_login(self.admin)
+        sin_usuario = Alumno.objects.create(
+            matricula='20260077', nombre='Pedro Sin Acceso', semestre=1,
+            carrera=self.carrera)
+
+        url = reverse('usuario_create_alumno_existente')
+        self.client.post(url, {'alumno': sin_usuario.pk,
+                               'password_inicial': 'alumno123'})
+        self.assertTrue(self.client.login(username='20260077',
+                                          password='alumno123'))
+
+        # Una vez con usuario, deja de aparecer en la lista de pendientes.
+        self.client.force_login(self.admin)
+        respuesta = self.client.post(url, {'alumno': sin_usuario.pk,
+                                           'password_inicial': 'alumno123'})
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(Perfil.objects.filter(alumno=sin_usuario).count(), 1)
+
+    def test_cambio_de_contrasena(self):
+        self.client.force_login(self.admin)
+        respuesta = self.client.post(
+            reverse('usuario_password', args=[self.estudiante.pk]),
+            {'password': 'nueva-clave-2026', 'repetir': 'nueva-clave-2026'})
+
+        self.assertRedirects(respuesta, reverse('usuario_list'))
+        self.assertTrue(self.client.login(username='20260001',
+                                          password='nueva-clave-2026'))
+
+    def test_la_contrasena_no_se_confirma_si_no_coincide(self):
+        self.client.force_login(self.admin)
+        respuesta = self.client.post(
+            reverse('usuario_password', args=[self.estudiante.pk]),
+            {'password': 'nueva-clave-2026', 'repetir': 'otra-cosa'})
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertTrue(self.client.login(username='20260001',
+                                          password='clave-de-prueba'))

@@ -7,7 +7,15 @@
 
 <div class="acciones" style="margin-bottom: 1rem;">
     <a class="boton" href="{% url 'grupo_create' %}">Registrar grupo</a>
+    <a class="boton secundario" href="{% url 'periodo_list' %}">Administrar periodos</a>
 </div>
+
+<p class="ayuda">
+    Solo se pueden inscribir alumnos en los grupos del periodo vigente
+    {% if periodo_activo %}(<strong>{{ periodo_activo.nombre }}</strong>){% endif %}.
+    Puedes cambiar el vigente desde <a href="{% url 'periodo_list' %}">Periodos</a>
+    o desde el selector del encabezado.
+</p>
 
 <div class="contenedor">
     <table id="tabla-grupos" class="display" style="width:100%">

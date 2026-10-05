@@ -1,6 +1,6 @@
 """Vistas del sistema escolar agrupadas por responsabilidad."""
 
-from .cardex import alumno_cardex
+from .cardex import alumno_cardex, mi_cardex
 from .carga import carga_de_alumno, mi_carga_academica
 from .cuentas import CerrarSesion, IniciarSesion, index
 from .catalogos import (AlumnoCreateView, AlumnoDeleteView, AlumnoListView,
@@ -8,9 +8,15 @@ from .catalogos import (AlumnoCreateView, AlumnoDeleteView, AlumnoListView,
                         CarreraListView, CarreraUpdateView, GrupoCreateView,
                         GrupoDeleteView, GrupoListView, GrupoUpdateView,
                         MateriaCreateView, MateriaDeleteView, MateriaListView,
-                        MateriaUpdateView)
+                        MateriaUpdateView, PeriodoActivarView,
+                        PeriodoCreateView, PeriodoDeleteView, PeriodoListView,
+                        PeriodoUpdateView)
 from .inscripcion import (AlumnosParaInscribir, InscripcionCoordinador,
-                          MiInscripcion)
+                         MiInscripcion)
+from .usuarios import (UsuarioAlumnoCreateView, UsuarioAlumnoExistenteCreateView,
+                       UsuarioDeleteView, UsuarioListView, UsuarioPasswordView,
+                       UsuarioPersonalCreateView, UsuarioTipoView,
+                       UsuarioUpdateView, usuario_redirect_alumno)
 
 __all__ = [
     'index',
@@ -22,6 +28,12 @@ __all__ = [
     'MateriaListView', 'MateriaCreateView', 'MateriaUpdateView',
     'MateriaDeleteView',
     'GrupoListView', 'GrupoCreateView', 'GrupoUpdateView', 'GrupoDeleteView',
+    'PeriodoListView', 'PeriodoCreateView', 'PeriodoUpdateView',
+    'PeriodoDeleteView', 'PeriodoActivarView',
     'AlumnosParaInscribir', 'InscripcionCoordinador', 'MiInscripcion',
-    'alumno_cardex', 'carga_de_alumno', 'mi_carga_academica',
+    'alumno_cardex', 'mi_cardex', 'carga_de_alumno', 'mi_carga_academica',
+    'UsuarioListView', 'UsuarioTipoView', 'UsuarioAlumnoCreateView',
+    'UsuarioAlumnoExistenteCreateView', 'UsuarioPersonalCreateView',
+    'UsuarioUpdateView', 'UsuarioPasswordView', 'UsuarioDeleteView',
+    'usuario_redirect_alumno',
 ]

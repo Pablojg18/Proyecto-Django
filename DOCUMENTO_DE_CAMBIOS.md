@@ -24,7 +24,7 @@ Documento que registra todos los cambios realizados sobre el proyecto, indicando
 | Qué | Dónde |
 |---|---|
 | Registro de los 5 modelos en el admin de Django | `academico/admin.py` (`CarreraAdmin`, `MateriaAdmin`, `GrupoAdmin`, `AlumnoAdmin`, `CalificacionAdmin`) |
-| Superusuario creado (`admin` / `admin123`) | Base de datos (tabla `auth_user`) |
+| Superusuario `admin` creado con `createsuperuser` | Base de datos (tabla `auth_user`) |
 
 ## 4. Plantilla de lista con DataTables y exportación a Excel
 
@@ -53,7 +53,7 @@ Documento que registra todos los cambios realizados sobre el proyecto, indicando
 | Migración completa ejecutada contra MySQL 8.4.11 | Base de datos MySQL `escolar` (tablas de academico, auth, admin, contenttypes, sessions) |
 | Datos migrados desde `db.sqlite3` (3 carreras, 1 materia, 1 grupo, 2 alumnos, 1 calificación) | Base de datos MySQL `escolar` |
 | Instalación de MySQL 8.4.11 en `%LOCALAPPDATA%\mysql84` (instancia independiente, no toca el MySQL 8.0 existente) | `%LOCALAPPDATA%\mysql84\mysql-8.4.11-winx64` |
-| Superusuario recreado en MySQL (`admin` / `admin123`) | Base de datos MySQL (tabla `auth_user`) |
+| Superusuario `admin` recreado en MariaDB con `createsuperuser` | Base de datos MariaDB (tabla `auth_user`) |
 
 ## 7. Scripts de arranque
 
@@ -132,11 +132,14 @@ Matriz de permisos implementada:
 |---|---|---|---|
 | Alta, edición y baja de alumnos, carreras y materias | Sí | No | No |
 | Consulta de alumnos, carreras y materias | Sí | Sí | No |
-| Alta, edición y baja de grupos | No | Sí | No |
-| Inscripción de alumnos (elegir alumno y materias) | No | Sí | No |
+| Alta, edición y baja de grupos | Sí | Sí | No |
+| Alta, edición y baja de periodos y cambio del vigente | Sí | Sí | No |
+| Inscripción de alumnos (elegir alumno y materias) | Sí | Sí | No |
 | Inscripción propia | No | No | Sí (sin carga activa) |
-| Consulta de carga académica | No | Sí | Sí (solo la propia) |
-| Captura de calificaciones finales (cardex) | No | Sí | No |
+| Consulta de carga académica | Sí | Sí | Sí (solo la propia) |
+| Captura de calificaciones finales (cardex) | Sí | Sí | No |
+| Consulta de cardex | Sí | Sí | Sí (el propio, sin editar) |
+| Gestión de usuarios (alta, edición, contraseña y baja) | Sí | Sí (sin crear administradores) | No |
 
 > El superusuario de `/admin/` ignora la matriz anterior para poder revisar todo el
 > sistema; cualquier otro usuario queda sujeto a su rol.
@@ -185,8 +188,9 @@ La captura de calificaciones finales de la tarea anterior se conserva en
 
 | Qué | Dónde |
 |---|---|
-| 40 pruebas: sesión, matriz de permisos por rol, CRUD de los cuatro catálogos, reglas de inscripción y carga académica | `academico/tests.py` |
+| 63 pruebas: sesión, matriz de permisos por rol, CRUD de los cuatro catálogos, reglas de inscripción, carga académica, gestión de usuarios y periodos | `academico/tests.py` |
 | Comando que crea un coordinador y un usuario por cada alumno, para probar los tres roles | `academico/management/commands/crear_usuarios_demo.py` |
+| Comando que crea el periodo `2026-2` con las materias `MAT103` y `MAT104` listas para inscripciones | `academico/management/commands/sembrar_periodo_demo.py` |
 | Registro del modelo `Perfil` en el admin de Django | `academico/admin.py` |
 
 Comandos de apoyo:
@@ -194,6 +198,7 @@ Comandos de apoyo:
 ```
 python manage.py test academico
 python manage.py crear_usuarios_demo
+python manage.py sembrar_periodo_demo --activar
 ```
 
 Accesos de prueba que deja el comando:
@@ -204,8 +209,42 @@ Accesos de prueba que deja el comando:
 | Coordinador | `coordinador` | `coordinador123` |
 | Estudiante | la matrícula de cada alumno | `alumno123` |
 
-> Para abrir un periodo nuevo basta cambiar `PERIODO_ACTUAL` en `settings.py`: es el
-> valor contra el que se valida la inscripción y se calcula la carga académica activa.
+> El periodo vigente ya no se cambia editando `PERIODO_ACTUAL` en `settings.py`: se
+> cambia desde la pantalla **Periodos** o con el selector del encabezado. Ese valor en
+> `settings.py` solo sirve para sembrar el periodo inicial.
+
+---
+
+## 16. Periodo académico, pantalla de usuarios y cardex del estudiante
+
+| Qué | Dónde |
+|---|---|
+| Modelo `Periodo` (nombre único, `activo`, `save()` que desactiva el resto, `Periodo.actual()` y `Periodo.activar()`) | `academico/models.py` |
+| `Grupo.periodo` como clave foránea obligatoria; `Grupo.lugares_disponibles` sigue funcionando igual | `academico/models.py` |
+| Migración que convierte la columna textual `periodo` del grupo en FK, crea `2026-1` (activo) y `AGO-DIC` (histórico) y conserva los 3 grupos existentes | `academico/migrations/0005_periodo.py` |
+| `PERIODO_ACTUAL` pasa a ser solo el nombre del periodo que se siembra | `escolar_project/settings.py` |
+| Servicios de inscripción, cardex y carga leen el periodo vigente de la base de datos | `academico/services.py`, `academico/views/carga.py` |
+| Pantalla **Periodos**: alta, edición, borrado (protegido si tiene grupos) y activación | `academico/views/catalogos.py` (`PeriodoListView`, `PeriodoCreateView`, `PeriodoUpdateView`, `PeriodoDeleteView`, `PeriodoActivarView`) |
+| Selector del periodo vigente en el encabezado, con retorno a la página de origen | `academico/templates/academico/base.html` |
+| Periodo activo y lista de periodos disponibles para las plantillas | `academico/context_processors.py` |
+| Formularios `PeriodoForm`, `AlumnoForm`, `AlumnosSinUsuario`, `UsuarioPersonalForm`, `UsuarioEdicionForm` y `PasswordForm` | `academico/forms.py` |
+| Pantalla central **Usuarios**: alta de alumno, alta de alumno existente, alta de personal, edición de rol y estado, contraseña y baja protegida | `academico/views/usuarios.py` |
+| `/alumnos/nuevo/` deja de dar de alta y redirige a la pantalla de usuarios | `escolar_project/urls.py` (`alumno_create`), `academico/views/usuarios.py` (`usuario_redirect_alumno`) |
+| Plantillas de usuarios y de periodos | `academico/templates/academico/usuarios*.html`, `periodo_list.html` |
+| `mi_cardex` de solo lectura para el estudiante, que sigue viendo su historial en modo consulta | `academico/views/cardex.py`, `academico/templates/academico/alumno_cardex.html` |
+| Portada con tarjetas por operación según el rol | `academico/views/cuentas.py`, `academico/templates/academico/index.html` |
+| Plantilla de grupo con el periodo de cada grupo y filtro por periodo | `academico/templates/academico/grupo_list.html` |
+
+Datos de demostración del periodo siguiente:
+
+```
+python manage.py sembrar_periodo_demo            # crea 2026-2 sin activarlo
+python manage.py sembrar_periodo_demo --activar  # además lo deja vigente
+```
+
+> `MAT101` y `MAT102` ya están cursadas por los alumnos existentes, por eso el comando
+> siembra `MAT103` y `MAT104`. Un alumno con carga activa en `2026-1` tampoco puede
+> inscribirse hasta que se desinscriba o termine el periodo.
 
 
 ---
@@ -220,3 +259,4 @@ Accesos de prueba que deja el comando:
 6. `feat: promedio general y cardex de alumnos` — propiedades de promedio en el modelo, formulario de captura de calificación final y vista de cardex.
 7. `chore: base de datos en MariaDB y proyecto simplificado` — se crea y migra la base `escolar`, se eliminan los scripts `.bat`, `asgi.py` y `tests.py`, y la portada pasa a ser un menú.
 8. `feat: roles, catalogos, inscripcion y carga academica` — perfil con rol e inicio de sesión, CRUD de alumnos, carreras, materias y grupos, reglas de inscripción y consulta de carga académica, con sus pruebas.
+9. `feat: periodo academico, pantalla de usuarios y cardex del estudiante` — `Periodo` como clave foránea de `Grupo` con pantalla y selector de periodo vigente, gestión centralizada de usuarios y roles, cardex de solo lectura para el estudiante y datos de demostración de `2026-2`.

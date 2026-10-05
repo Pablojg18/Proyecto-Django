@@ -1,53 +1,44 @@
-{% extends 'academico/base.html' %}
+{% extends "academico/base.html" %}
 
 {% block titulo %}{{ titulo }}{% endblock %}
 
 {% block contenido %}
 <h1>{{ titulo }}</h1>
-<p>Periodo en curso: <strong>{{ periodo_actual }}</strong></p>
 
-{% if resumen %}
-<div class="resumen">
-    {% for etiqueta, valor in resumen.items %}
-    <div class="tarjeta">
-        <div class="valor">{{ valor }}</div>
-        <div class="etiqueta">{{ etiqueta }}</div>
+{% if tarjetas %}
+    <p class="ayuda">
+        {% if periodo_activo %}
+            Periodo vigente: <strong>{{ periodo_activo.nombre }}</strong>.
+        {% else %}
+            Aún no hay ningún periodo registrado: las inscripciones están cerradas.
+        {% endif %}
+    </p>
+
+    <div class="rejilla-tarjetas">
+        {% for tarjeta in tarjetas %}
+            <article class="tarjeta-operacion">
+                <h2>{{ tarjeta.titulo }}</h2>
+                <p>{{ tarjeta.descripcion }}</p>
+                <a class="boton" href="{% url tarjeta.url %}">{{ tarjeta.etiqueta }}</a>
+            </article>
+        {% endfor %}
     </div>
-    {% endfor %}
-</div>
+{% else %}
+    <div class="contenedor">
+        <p>Tu usuario todavía no está asociado a un alumno registrado.
+           Pide al coordinador que lo registre para poder inscribirte.</p>
+    </div>
 {% endif %}
 
-<section class="contenedor">
-    <h2>Operaciones disponibles</h2>
-    {% if es_admin %}
-    <ul>
-        <li><a href="{% url 'alumno_list' %}">Catálogo de alumnos</a> — alta, edición y baja de alumnos.</li>
-        <li><a href="{% url 'carrera_list' %}">Catálogo de carreras</a> — alta, edición y baja de carreras.</li>
-        <li><a href="{% url 'materia_list' %}">Catálogo de materias</a> — alta, edición y baja de materias.</li>
-        {% if user.is_superuser %}
-        <li><a href="{% url 'grupo_list' %}">Catálogo de grupos</a> — gestión de grupos.</li>
-        <li><a href="{% url 'inscripcion_alumnos' %}">Inscripción de alumnos</a> — elegir alumno y materias.</li>
-        <li><a href="{% url 'alumno_list' %}">Calificaciones finales</a> — cardex por alumno.</li>
-        {% endif %}
-        <li><a href="{% url 'admin:index' %}">Administración de Django</a> — respaldo de la base de datos.</li>
-    </ul>
-    {% elif es_coordinador %}
-    <ul>
-        <li><a href="{% url 'grupo_list' %}">Catálogo de grupos</a> — alta, edición y baja de grupos.</li>
-        <li><a href="{% url 'inscripcion_alumnos' %}">Inscripción de alumnos</a> — elegir alumno y materias a cursar.</li>
-        <li><a href="{% url 'alumno_list' %}">Catálogo de alumnos</a> — consulta y carga académica.</li>
-        <li><a href="{% url 'alumno_list' %}">Calificaciones finales</a> — cardex por alumno.</li>
-        <li><a href="{% url 'materia_list' %}">Catálogo de materias</a> — consulta.</li>
-    </ul>
-    {% elif es_estudiante %}
-    <ul>
-        <li><a href="{% url 'mi_inscripcion' %}">Inscribirme en materias</a> — elige las materias del periodo.</li>
-        <li><a href="{% url 'mi_carga_academica' %}">Consultar mi carga académica</a> — materias del periodo y avance.</li>
-    </ul>
-    {% else %}
-    <ul>
-        <li class="no-disponible">Tu usuario no tiene un rol asignado; contacta al administrador.</li>
-    </ul>
-    {% endif %}
-</section>
+{% if resumen %}
+    <h2>Cifras del sistema</h2>
+    <div class="resumen">
+        {% for etiqueta, valor in resumen.items %}
+            <div class="tarjeta">
+                <div class="valor">{{ valor }}</div>
+                <div class="etiqueta">{{ etiqueta }}</div>
+            </div>
+        {% endfor %}
+    </div>
+{% endif %}
 {% endblock %}

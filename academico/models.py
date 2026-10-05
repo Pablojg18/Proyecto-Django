@@ -46,6 +46,48 @@ class Materia(models.Model):
         return f'{self.codigo} – {self.nombre}'
 
 
+class Periodo(models.Model):
+    """Periodo académico: solo uno puede estar activo a la vez."""
+
+    nombre = models.CharField(max_length=20, unique=True)
+    activo = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name = 'Periodo'
+        verbose_name_plural = 'Periodos'
+        ordering = ['nombre']
+
+    def __str__(self):
+        return self.nombre
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        if self.activo:
+            self.desactivar_otros()
+
+    def delete(self, *args, **kwargs):
+        if self.activo:
+            self.activo = False
+            self.save(update_fields=['activo'])
+        return super().delete(*args, **kwargs)
+
+    def desactivar_otros(self):
+        Periodo.objects.exclude(pk=self.pk).filter(activo=True).update(
+            activo=False)
+
+    def activar(self):
+        """Deja este periodo como el vigente."""
+        if not self.activo:
+            self.activo = True
+            self.save(update_fields=['activo'])
+
+    @classmethod
+    def actual(cls):
+        """Periodo vigente; si no hay ninguno marcado, el más reciente."""
+        return (cls.objects.filter(activo=True).first()
+                or cls.objects.order_by('nombre').last())
+
+
 class Grupo(models.Model):
     TURNO_CHOICES = [
         ('MAT', 'Matutino'),
@@ -55,7 +97,8 @@ class Grupo(models.Model):
 
     materia = models.ForeignKey(Materia, on_delete=models.PROTECT,
                                 related_name='grupos')
-    periodo = models.CharField(max_length=9)
+    periodo = models.ForeignKey(Periodo, on_delete=models.PROTECT,
+                                related_name='grupos')
     cupo = models.PositiveSmallIntegerField(validators=[MinValueValidator(1)])
     num_alumnos = models.PositiveSmallIntegerField(
         default=0, validators=[MinValueValidator(0)]
@@ -67,7 +110,7 @@ class Grupo(models.Model):
     class Meta:
         verbose_name = 'Grupo'
         verbose_name_plural = 'Grupos'
-        ordering = ['periodo', 'materia']
+        ordering = ['-periodo', 'materia']
         constraints = [
             models.UniqueConstraint(
                 fields=['materia', 'periodo', 'horario', 'aula'],
@@ -91,7 +134,7 @@ class Grupo(models.Model):
         return self.num_alumnos >= self.cupo
 
     def __str__(self):
-        return f'{self.materia} – {self.periodo}'
+        return f'{self.materia} – {self.periodo.nombre}'
 
 
 class Calificacion(models.Model):
@@ -179,9 +222,8 @@ class Alumno(models.Model):
         return (sum(valores) / Decimal(len(valores))).quantize(Decimal('0.0'))
 
     def carga_academica(self, periodo=None):
-        """Inscripciones del alumno en un periodo (el vigente si no se indica)."""
-        if periodo is None:
-            periodo = settings.PERIODO_ACTUAL
+        """Inscripciones del alumno en un periodo (el activo si no se indica)."""
+        periodo = periodo or Periodo.actual()
         return (self.calificaciones
                 .filter(grupo__periodo=periodo)
                 .select_related('grupo', 'grupo__materia')
@@ -191,7 +233,7 @@ class Alumno(models.Model):
     def tiene_carga_activa(self):
         """True si ya tiene materias inscritas en el periodo vigente."""
         return self.calificaciones.filter(
-            grupo__periodo=settings.PERIODO_ACTUAL).exists()
+            grupo__periodo=Periodo.actual()).exists()
 
     def ha_cursado(self, materia):
         """True si el alumno ya tiene una inscripción (calificada o no) de la materia."""

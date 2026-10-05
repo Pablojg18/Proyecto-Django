@@ -1,10 +1,9 @@
 """Consulta de la carga académica de un alumno."""
 
-from django.conf import settings
 from django.contrib import messages
 from django.shortcuts import get_object_or_404, redirect, render
 
-from ..models import Alumno
+from ..models import Alumno, Periodo
 from ..permisos import perfil_de, requiere_rol
 
 ROLES_CONTROL = ('ADMINISTRADOR', 'COORDINADOR')
@@ -13,8 +12,8 @@ ROLES_ESTUDIANTE = ('ESTUDIANTE',)
 
 def contexto_carga(alumno):
     historial = (alumno.calificaciones
-                 .select_related('grupo', 'grupo__materia')
-                 .order_by('grupo__periodo', 'grupo__materia__codigo'))
+                 .select_related('grupo', 'grupo__materia', 'grupo__periodo')
+                 .order_by('grupo__periodo__nombre', 'grupo__materia__codigo'))
     return {
         'alumno': alumno,
         'carga_actual': list(alumno.carga_academica()),
@@ -24,7 +23,7 @@ def contexto_carga(alumno):
         'creditos_acumulados': alumno.creditos_acumulados,
         'promedio_general': alumno.promedio_general,
         'avance_carrera': alumno.avance_carrera,
-        'periodo_actual': settings.PERIODO_ACTUAL,
+        'periodo_actual': Periodo.actual(),
     }
 
 

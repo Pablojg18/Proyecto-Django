@@ -1,0 +1,79 @@
+{% extends 'academico/base.html' %}
+
+{% block titulo %}Periodos{% endblock %}
+
+{% block contenido %}
+<h1>Periodos académicos</h1>
+
+<div class="acciones" style="margin-bottom: 1rem;">
+    <a class="boton" href="{% url 'periodo_create' %}">Nuevo periodo</a>
+</div>
+
+<p class="ayuda">
+    Solo uno puede estar vigente. Las inscripciones se hacen únicamente en el
+    periodo vigente y los grupos se ofrecen según el periodo al que pertenecen.
+</p>
+
+<div class="contenedor">
+    <table id="tabla-periodos" class="display" style="width:100%">
+        <thead>
+            <tr>
+                <th>Periodo</th>
+                <th>Estado</th>
+                <th class="columna-numerica">Grupos</th>
+                <th class="columna-acciones">Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for p in periodos %}
+            <tr>
+                <td>{{ p.nombre }}</td>
+                <td>
+                    {% if p.activo %}
+                        <span class="etiqueta-estado ok">Vigente</span>
+                    {% else %}
+                        <span class="etiqueta-estado">Inactivo</span>
+                    {% endif %}
+                </td>
+                <td class="numero">{{ p.total_grupos }}</td>
+                <td>
+                    <div class="acciones">
+                        {% if not p.activo %}
+                            <form method="post" action="{% url 'periodo_activar' %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="periodo" value="{{ p.pk }}">
+                                <input type="hidden" name="siguiente" value="{{ request.path }}">
+                                <button type="submit" class="boton">Dejar vigente</button>
+                            </form>
+                        {% endif %}
+                        <a class="boton secundario" href="{% url 'periodo_update' p.pk %}">Editar</a>
+                        <a class="boton peligro" href="{% url 'periodo_delete' p.pk %}">Eliminar</a>
+                    </div>
+                </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="4">Sin periodos registrados</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const columnasExport = { columns: [0, 1, 2] };
+    new DataTable('#tabla-periodos', {
+        language: { url: 'https://cdn.datatables.net/plug-ins/2.2.2/i18n/es-MX.json' },
+        dom: 'Bfrtip',
+        columnDefs: [
+            { targets: '.columna-numerica', type: 'num' },
+            { targets: '.columna-acciones', orderable: false, searchable: false }
+        ],
+        buttons: [
+            { extend: 'excelHtml5', text: 'Exportar a Excel', title: 'Periodos', exportOptions: columnasExport },
+            { extend: 'csv', exportOptions: columnasExport },
+            { extend: 'print', exportOptions: columnasExport }
+        ]
+    });
+</script>
+{% endblock %}

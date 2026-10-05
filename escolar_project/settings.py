@@ -121,8 +121,9 @@ LOGIN_REDIRECT_URL = 'index'
 LOGOUT_REDIRECT_URL = 'login'
 
 
-# Periodo académico vigente: contra este valor se validan las inscripciones
-# y se define la "carga académica activa" de cada alumno.
+# Periodo con el que se crea el primer registro del catálogo `Periodo`.
+# Después de la migración, el periodo vigente se cambia desde la aplicación
+# (catálogo Periodos), no desde aquí.
 PERIODO_ACTUAL = '2026-1'
 
 # Calificación mínima para considerar una materia como aprobada.

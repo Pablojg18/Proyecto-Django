@@ -1,0 +1,41 @@
+{% extends 'academico/base.html' %}
+
+{% block titulo %}Nuevo usuario{% endblock %}
+
+{% block contenido %}
+<h1>¿Qué tipo de usuario vas a crear?</h1>
+<a class="volver" href="{% url 'usuario_list' %}">&larr; Volver a usuarios</a>
+
+<div class="rejilla-tarjetas">
+    <article class="tarjeta-operacion">
+        <h2>Alumno nuevo</h2>
+        <p>Registra los datos del alumno y su contraseña de acceso en un solo paso.</p>
+        <a class="boton" href="{% url 'usuario_create_alumno' %}">Crear alumno</a>
+    </article>
+    <article class="tarjeta-operacion">
+        <h2>Alumno existente</h2>
+        <p>
+            Da acceso a un alumno que ya estaba en el catálogo.
+            {% if sin_usuario %}
+                Hay <strong>{{ sin_usuario }}</strong> alumno(s) sin usuario.
+            {% else %}
+                Por ahora todos los alumnos tienen usuario.
+            {% endif %}
+        </p>
+        {% if sin_usuario %}
+            <a class="boton" href="{% url 'usuario_create_alumno_existente' %}">Dar acceso</a>
+        {% endif %}
+    </article>
+    <article class="tarjeta-operacion">
+        <h2>Personal</h2>
+        <p>
+            {% if es_admin %}
+                Crea otro administrador o un coordinador.
+            {% else %}
+                Crea una cuenta de coordinador.
+            {% endif %}
+        </p>
+        <a class="boton" href="{% url 'usuario_create_personal' %}">Crear cuenta</a>
+    </article>
+</div>
+{% endblock %}

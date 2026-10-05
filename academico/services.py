@@ -1,10 +1,9 @@
 """Reglas de negocio de la inscripción de alumnos a grupos."""
 
-from django.conf import settings
 from django.db import transaction
 from django.db.models import F
 
-from .models import Calificacion, Grupo
+from .models import Calificacion, Grupo, Periodo
 
 
 class ErrorInscripcion(Exception):
@@ -24,10 +23,14 @@ def inscribir_alumno(alumno, grupos, forzar=False):
     if not grupos:
         return []
 
+    periodo = Periodo.actual()
+    if periodo is None:
+        raise ErrorInscripcion(
+            'No hay ningún periodo registrado: la inscripción está cerrada.')
     if not forzar and alumno.tiene_carga_activa:
         raise ErrorInscripcion(
             f'{alumno.matricula} ya tiene una carga académica activa en el '
-            f'periodo {settings.PERIODO_ACTUAL}.'
+            f'periodo {periodo}.'
         )
 
     creadas = []
@@ -36,11 +39,11 @@ def inscribir_alumno(alumno, grupos, forzar=False):
             bloqueado = Grupo.objects.select_for_update().get(pk=grupo.pk)
             materia = bloqueado.materia
 
-            if bloqueado.periodo != settings.PERIODO_ACTUAL:
+            if bloqueado.periodo_id != periodo.pk:
                 raise ErrorInscripcion(
                     f'El grupo de {materia.nombre} pertenece al periodo '
                     f'{bloqueado.periodo} y la inscripción está abierta para '
-                    f'{settings.PERIODO_ACTUAL}.'
+                    f'{periodo}.'
                 )
             if materia.carrera_id != alumno.carrera_id:
                 raise ErrorInscripcion(

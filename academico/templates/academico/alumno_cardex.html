@@ -1,10 +1,14 @@
 {% extends 'academico/base.html' %}
 
-{% block titulo %}Cardex de {{ alumno.matricula }}{% endblock %}
+{% block titulo %}{% if solo_lectura %}Mi cardex{% else %}Cardex de {{ alumno.matricula }}{% endif %}{% endblock %}
 
 {% block contenido %}
-<h1>Calificaciones finales</h1>
-<a class="volver" href="{% url 'alumno_list' %}">&larr; Volver a la lista de alumnos</a>
+<h1>{% if solo_lectura %}Mi cardex{% else %}Calificaciones finales{% endif %}</h1>
+{% if solo_lectura %}
+    <a class="volver" href="{% url 'index' %}">&larr; Volver al inicio</a>
+{% else %}
+    <a class="volver" href="{% url 'alumno_list' %}">&larr; Volver a la lista de alumnos</a>
+{% endif %}
 
 <div class="contenedor">
     <h2>{{ alumno.matricula }} – {{ alumno.nombre }}</h2>
@@ -14,10 +18,55 @@
         <tr><th>Especialidad:</th><td>{{ alumno.especialidad|default:"—" }}</td></tr>
         <tr><th>Estatus:</th><td>{{ alumno.get_estatus_display }}</td></tr>
         <tr><th>Materias cursadas:</th><td>{{ alumno.materias_cursadas }}</td></tr>
+        <tr><th>Créditos acumulados:</th><td>{{ alumno.creditos_acumulados }}</td></tr>
         <tr><th>Promedio general:</th><td>{% if alumno.promedio_general is not None %}{{ alumno.promedio_general }}{% else %}—{% endif %}</td></tr>
     </table>
 </div>
 
+{% if solo_lectura %}
+    <div class="contenedor">
+        <p class="ayuda">
+            Este es tu historial. Las calificaciones las captura la coordinación
+            de la escuela; si ves un error, comunícate con ella.
+        </p>
+        <table>
+            <thead>
+                <tr>
+                    <th>Periodo</th>
+                    <th>Código</th>
+                    <th>Materia</th>
+                    <th>Turno</th>
+                    <th>Horario</th>
+                    <th class="numero">Créditos</th>
+                    <th class="numero">Calificación</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in calificaciones %}
+                <tr>
+                    <td>{{ c.grupo.periodo }}</td>
+                    <td>{{ c.grupo.materia.codigo }}</td>
+                    <td>{{ c.grupo.materia.nombre }}</td>
+                    <td>{{ c.grupo.get_turno_display }}</td>
+                    <td>{{ c.grupo.horario }}</td>
+                    <td class="numero">{{ c.grupo.materia.creditos }}</td>
+                    <td class="numero">
+                        {% if c.valor is not None %}
+                            {{ c.valor }}
+                            {% if c.es_aprobada %}<span class="etiqueta-estado ok">Aprobada</span>
+                            {% else %}<span class="etiqueta-estado no">Reprobada</span>{% endif %}
+                        {% else %}
+                            <span class="no-disponible">Sin calificar</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="7">Todavía no tienes materias registradas.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% else %}
 <form method="post">
     {% csrf_token %}
     {{ formset.management_form }}
@@ -70,4 +119,5 @@
         {% endif %}
     </div>
 </form>
+{% endif %}
 {% endblock %}
