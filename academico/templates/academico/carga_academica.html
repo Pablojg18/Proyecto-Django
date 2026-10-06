@@ -20,12 +20,12 @@
         <div class="etiqueta">Créditos acumulados</div>
     </div>
     <div class="tarjeta">
-        <div class="valor">{% if promedio_general is not None %}{{ promedio_general }}{% else %}—{% endif %}</div>
-        <div class="etiqueta">Promedio general</div>
+        <div class="valor">{{ materias_aprobadas }}</div>
+        <div class="etiqueta">Materias aprobadas</div>
     </div>
     <div class="tarjeta">
-        <div class="valor">{{ avance_carrera }}%</div>
-        <div class="etiqueta">Avance de la carrera</div>
+        <div class="valor">{% if promedio_general is not None %}{{ promedio_general }}{% else %}—{% endif %}</div>
+        <div class="etiqueta">Promedio general</div>
     </div>
 </div>
 
@@ -42,7 +42,7 @@
 </div>
 
 <div class="contenedor">
-    <h2>Carga académica actual ({{ periodo_actual }})</h2>
+    <h2>Carga académica actual ({{ periodo_activo }})</h2>
     {% if carga_actual %}
     <table>
         <thead>
@@ -60,7 +60,7 @@
             <tr>
                 <td>{{ c.grupo.materia.codigo }} – {{ c.grupo.materia.nombre }}</td>
                 <td>{{ c.grupo.periodo }}</td>
-                <td>{{ c.grupo.get_turno_display }}</td>
+                <td>{{ c.grupo.turno_display }}</td>
                 <td>{{ c.grupo.horario }}</td>
                 <td>{{ c.grupo.aula|default:"—" }}</td>
                 <td class="numero">{{ c.grupo.materia.creditos }}</td>
@@ -73,52 +73,12 @@
     {% endif %}
 </div>
 
-<div class="contenedor">
-    <h2>Historial de materias cursadas</h2>
-    {% if historial %}
-    <table>
-        <thead>
-            <tr>
-                <th>Periodo</th>
-                <th>Materia</th>
-                <th>Grupo</th>
-                <th class="numero">Créditos</th>
-                <th class="numero">Calificación</th>
-                <th>Situación</th>
-                <th>Capturada</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for c in historial %}
-            <tr>
-                <td>{{ c.grupo.periodo }}</td>
-                <td>{{ c.grupo.materia.codigo }} – {{ c.grupo.materia.nombre }}</td>
-                <td>{{ c.grupo.get_turno_display }} · {{ c.grupo.horario }}</td>
-                <td class="numero">{{ c.grupo.materia.creditos }}</td>
-                <td class="numero">{% if c.valor is not None %}{{ c.valor }}{% else %}—{% endif %}</td>
-                <td>
-                    {% if c.valor is None %}
-                    <span class="etiqueta-estado">En curso</span>
-                    {% elif c.es_aprobada %}
-                    <span class="etiqueta-estado ok">Aprobada</span>
-                    {% else %}
-                    <span class="etiqueta-estado no">Reprobada</span>
-                    {% endif %}
-                </td>
-                <td>{{ c.fecha_captura|default:"—" }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    {% else %}
-    <p class="no-disponible">El alumno aún no cursa materias.</p>
-    {% endif %}
-</div>
-
 <div class="acciones">
     {% if es_coordinador %}
-    <a class="boton secundario" href="{% url 'alumno_cardex' alumno.matricula %}">Modificar calificaciones</a>
+    <a class="boton secundario" href="{% url 'alumno_cardex' alumno.matricula %}">Ver historial y capturar calificaciones</a>
     <a class="boton" href="{% url 'inscripcion_alumno' alumno.matricula %}">Inscribir materias</a>
+    {% else %}
+    <a class="boton secundario" href="{% url 'mi_cardex' %}">Mi cardex</a>
     {% endif %}
     {% if es_coordinador or es_admin %}
     <a class="boton secundario" href="{% url 'alumno_list' %}">Volver al catálogo</a>

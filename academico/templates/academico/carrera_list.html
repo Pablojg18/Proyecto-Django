@@ -12,6 +12,7 @@
 {% endif %}
 
 <div class="contenedor">
+    {% if carreras %}
     <table id="tabla-carreras" class="display" style="width:100%">
         <thead>
             <tr>
@@ -42,22 +43,19 @@
                 </td>
                 {% endif %}
             </tr>
-            {% empty %}
-            <tr><td colspan="7">Sin registros</td></tr>
             {% endfor %}
         </tbody>
     </table>
+    {% else %}
+    <p class="vacio">No hay carreras registradas.</p>
+    {% endif %}
 </div>
 {% endblock %}
 
 {% block scripts %}
+{% if carreras %}
 <script>
-    new DataTable('#tabla-carreras', {
-        pageLength: 10,
-        language: { url: 'https://cdn.datatables.net/plug-ins/2.2.2/i18n/es-MX.json' },
-        dom: 'Bfrtip',
-        columnDefs: [{ targets: '.columna-numerica', type: 'num' },
-                     { targets: '.columna-acciones', orderable: false, searchable: false }],
+    iniciarTabla('#tabla-carreras', {
         buttons: [
             { extend: 'excelHtml5', text: 'Exportar a Excel', title: 'Carreras' },
             { extend: 'csv' },
@@ -65,4 +63,5 @@
         ]
     });
 </script>
+{% endif %}
 {% endblock %}

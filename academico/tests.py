@@ -1,14 +1,19 @@
-"""Pruebas de roles, permisos e inscripción del sistema escolar."""
+﻿"""Pruebas de roles, permisos e inscripción del sistema escolar."""
 
+from datetime import time
 from decimal import Decimal
+from io import StringIO
 
 from django.conf import settings
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
+from django.core.management import call_command
 from django.test import TestCase
 from django.urls import reverse
 
-from .models import (Alumno, Calificacion, Carrera, Grupo, Materia, Perfil,
-                     Periodo)
+from .forms import GrupoForm
+from .models import (Alumno, Calificacion, CalificacionUnidad, Carrera,
+                     Grupo, Materia, Perfil, Periodo)
 from .services import ErrorInscripcion, desinscribir_alumno, inscribir_alumno
 
 PERIODO = settings.PERIODO_ACTUAL
@@ -44,13 +49,14 @@ class BaseSistema(TestCase):
 
         cls.grupo_1 = Grupo.objects.create(
             materia=cls.materia_1, periodo=cls.periodo, cupo=30, num_alumnos=0,
-            horario='L-V 08:00-09:30', aula='A-101', turno='MAT')
+            hora_inicio=time(8, 0), hora_fin=time(9, 30), aula='A-101')
         cls.grupo_2 = Grupo.objects.create(
             materia=cls.materia_2, periodo=cls.periodo, cupo=1, num_alumnos=0,
-            horario='L-V 10:00-11:30', aula='B-204', turno='VES')
+            hora_inicio=time(10, 0), hora_fin=time(11, 30), aula='B-204')
         cls.grupo_ajeno = Grupo.objects.create(
             materia=cls.materia_ajena, periodo=cls.periodo, cupo=30,
-            num_alumnos=0, horario='L-V 12:00-13:30', aula='C-101', turno='MAT')
+            num_alumnos=0, hora_inicio=time(12, 0), hora_fin=time(13, 30),
+            aula='C-101')
 
         cls.alumno = Alumno.objects.create(
             matricula='20260001', nombre='Ana López', semestre=2,
@@ -72,6 +78,28 @@ class BaseSistema(TestCase):
             username=username, password='clave-de-prueba', first_name=username)
         Perfil.objects.create(usuario=usuario, rol=rol, alumno=alumno)
         return usuario
+
+    @staticmethod
+    def calificar(alumno, grupo, valores=None):
+        """Inscribe al alumno y califica sus unidades.
+
+        ``valores`` es una lista con la calificación de cada unidad; si se
+        omite, las unidades quedan sin calificar.
+        """
+        inscripcion = Calificacion.objects.create(alumno=alumno, grupo=grupo)
+        valores = list(valores or [])
+        CalificacionUnidad.objects.bulk_create([
+            CalificacionUnidad(
+                calificacion=inscripcion, numero_unidad=numero + 1,
+                valor=valores[numero] if numero < len(valores) else None)
+            for numero in range(grupo.materia.unidades)
+        ])
+        return inscripcion
+
+    def calificar_todas_las_unidades(self, alumno, grupo, valor):
+        """Califica todas las unidades de la materia con el mismo valor."""
+        return self.calificar(alumno, grupo,
+                              [Decimal(valor)] * grupo.materia.unidades)
 
 
 class PruebasSesion(BaseSistema):
@@ -181,8 +209,7 @@ class PruebasPermisosPorRol(BaseSistema):
         self.assertRedirects(self.client.get(url), reverse('index'))
 
     def test_mi_cardex_del_estudiante_es_solo_lectura(self):
-        Calificacion.objects.create(alumno=self.alumno, grupo=self.grupo_1,
-                                    valor=Decimal('9.0'))
+        self.calificar_todas_las_unidades(self.alumno, self.grupo_1, '90')
         self.client.force_login(self.estudiante)
         respuesta = self.client.get(reverse('mi_cardex'))
 
@@ -284,12 +311,14 @@ class PruebasCruds(BaseSistema):
         self.client.force_login(self.coordinador)
         respuesta = self.client.post(reverse('grupo_create'), {
             'materia': self.materia_1.pk, 'periodo': self.periodo.pk,
-            'turno': 'MAT', 'horario': 'L-V 07:00-08:30', 'aula': 'A-102',
+            'hora_inicio': '07:00', 'hora_fin': '08:30', 'aula': 'A-102',
             'cupo': 25, 'num_alumnos': 0,
         })
         self.assertRedirects(respuesta, reverse('grupo_list'))
-        grupo = Grupo.objects.get(horario='L-V 07:00-08:30')
+        grupo = Grupo.objects.get(hora_inicio=time(7, 0), aula='A-102')
         self.assertEqual(grupo.periodo_id, self.periodo.pk)
+        self.assertEqual(grupo.horario, '07:00 - 08:30')
+        self.assertEqual(grupo.turno_display, 'Matutino')
 
     def test_alta_de_grupo_preselecciona_el_periodo_vigente(self):
         self.client.force_login(self.coordinador)
@@ -354,6 +383,23 @@ class PruebasCruds(BaseSistema):
         self.assertTrue(self.client.login(username='20260001',
                                           password='clave-de-prueba'))
 
+    def test_el_formulario_de_edicion_no_muestra_contrasena_inicial(self):
+        """La contraseña se administra desde Usuarios, no desde el catálogo."""
+        self.client.force_login(self.admin)
+        respuesta = self.client.get(
+            reverse('alumno_update', args=[self.alumno.pk]))
+
+        self.assertNotIn('password_inicial', respuesta.context['form'].fields)
+        self.assertNotContains(respuesta, 'Contraseña inicial')
+
+    def test_el_alta_sigue_pidiendo_contrasena_inicial(self):
+        """El alta de alumno (desde Usuarios) sí necesita la contraseña inicial."""
+        self.client.force_login(self.admin)
+        respuesta = self.client.get(reverse('usuario_create_alumno'))
+
+        self.assertIn('password_inicial', respuesta.context['form'].fields)
+        self.assertContains(respuesta, 'Contraseña inicial')
+
 
 class PruebasInscripcion(BaseSistema):
     def test_coordinador_filtra_alumnos_para_inscribir(self):
@@ -389,6 +435,7 @@ class PruebasInscripcion(BaseSistema):
                                         grupo=self.grupo_1).exists())
 
     def test_no_se_puede_inscribir_dos_veces_en_el_periodo(self):
+        """El estudiante solo se inscribe una vez por periodo."""
         Calificacion.objects.create(alumno=self.alumno, grupo=self.grupo_1)
         self.grupo_1.num_alumnos = 1
         self.grupo_1.save(update_fields=['num_alumnos'])
@@ -399,10 +446,26 @@ class PruebasInscripcion(BaseSistema):
                                      follow=True)
 
         self.assertEqual(respuesta.status_code, 200)
-        self.assertContains(respuesta, 'ya tiene una carga académica activa')
+        self.assertContains(respuesta, 'una vez por periodo')
         self.assertFalse(
             Calificacion.objects.filter(alumno=self.alumno,
                                         grupo=self.grupo_2).exists())
+
+    def test_el_servicio_tambien_bloquea_la_segunda_inscripcion(self):
+        Calificacion.objects.create(alumno=self.alumno, grupo=self.grupo_1)
+
+        with self.assertRaisesMessage(ErrorInscripcion, 'ya se inscribió'):
+            inscribir_alumno(self.alumno, [self.grupo_2])
+
+    def test_el_estudiante_elige_todas_sus_materias_de_una_vez(self):
+        self.client.force_login(self.estudiante)
+        respuesta = self.client.post(
+            reverse('mi_inscripcion'),
+            {'grupos': [self.grupo_1.pk, self.grupo_2.pk]})
+
+        self.assertEqual(respuesta.status_code, 302)
+        self.assertEqual(
+            Calificacion.objects.filter(alumno=self.alumno).count(), 2)
 
     def test_coordinador_sigue_pudiendo_inscribir_con_carga_activa(self):
         Calificacion.objects.create(alumno=self.alumno, grupo=self.grupo_1)
@@ -416,8 +479,8 @@ class PruebasInscripcion(BaseSistema):
                                         grupo=self.grupo_2).exists())
 
     def test_no_se_puede_inscribir_en_materia_ya_cursada(self):
-        cursada = Calificacion.objects.create(
-            alumno=self.alumno, grupo=self.grupo_1, valor=Decimal('8.5'))
+        cursada = self.calificar_todas_las_unidades(
+            self.alumno, self.grupo_1, '85')
         cursada.grupo.num_alumnos = 1
         cursada.grupo.save(update_fields=['num_alumnos'])
 
@@ -436,14 +499,13 @@ class PruebasInscripcion(BaseSistema):
     def test_no_se_puede_inscribir_en_grupo_de_otro_periodo(self):
         grupo_antiguo = Grupo.objects.create(
             materia=self.materia_1, periodo=self.periodo_anterior, cupo=10,
-            num_alumnos=0, horario='L-V 09:00-10:30')
+            num_alumnos=0, hora_inicio=time(9, 0), hora_fin=time(10, 30))
         with self.assertRaisesMessage(ErrorInscripcion, 'inscripción está abierta'):
             inscribir_alumno(self.alumno, [grupo_antiguo])
 
     def test_al_cambiar_el_periodo_vigente_se_abre_la_inscripcion(self):
         """Alumno con carga en 2026-1 puede inscribirse en el nuevo periodo."""
-        Calificacion.objects.create(alumno=self.alumno, grupo=self.grupo_1,
-                                    valor=Decimal('8.0'))
+        self.calificar_todas_las_unidades(self.alumno, self.grupo_1, '80')
         Grupo.objects.filter(pk=self.grupo_1.pk).update(num_alumnos=1)
 
         siguiente = Periodo.objects.create(nombre='2026-2', activo=False)
@@ -452,7 +514,7 @@ class PruebasInscripcion(BaseSistema):
             creditos=5, carrera=self.carrera)
         grupo_nuevo = Grupo.objects.create(
             materia=materia_nueva, periodo=siguiente, cupo=10, num_alumnos=0,
-            horario='L-V 08:00-09:30', aula='A-101', turno='MAT')
+            hora_inicio=time(8, 0), hora_fin=time(9, 30), aula='A-101')
 
         Periodo.objects.get(pk=siguiente.pk).activar()
 
@@ -477,7 +539,8 @@ class PruebasInscripcion(BaseSistema):
 
         self.client.force_login(self.coordinador)
         url = reverse('inscripcion_alumno', args=[self.alumno.matricula])
-        respuesta = self.client.post(url, {'quitar': [calificacion.pk]})
+        respuesta = self.client.post(url, {
+            'accion': 'quitar', 'quitar': [calificacion.pk]})
 
         self.assertEqual(respuesta.status_code, 302)
         self.assertFalse(
@@ -489,13 +552,15 @@ class PruebasInscripcion(BaseSistema):
         calificacion = Calificacion.objects.create(
             alumno=self.alumno, grupo=self.grupo_1)
         self.client.force_login(self.estudiante)
-        respuesta = self.client.post(reverse('mi_inscripcion'),
-                                     {'quitar': [calificacion.pk]})
-        self.assertEqual(respuesta.status_code, 200)
+        respuesta = self.client.post(reverse('mi_inscripcion'), {
+            'accion': 'quitar', 'quitar': [calificacion.pk]}, follow=True)
+
+        self.assertContains(respuesta, 'Solo tu coordinador')
         self.assertTrue(
             Calificacion.objects.filter(pk=calificacion.pk).exists())
 
-    def test_lista_de_materias_muestra_motivos_de_bloqueo(self):
+    def test_las_materias_no_disponibles_no_se_muestran(self):
+        """Solo se listan las materias que el alumno sí puede tomar."""
         cursada = Calificacion.objects.create(
             alumno=self.alumno, grupo=self.grupo_1)
         cursada.grupo.num_alumnos = 1
@@ -505,9 +570,19 @@ class PruebasInscripcion(BaseSistema):
         self.client.force_login(self.estudiante)
         respuesta = self.client.get(reverse('mi_inscripcion'))
 
-        self.assertContains(respuesta, 'Materia ya cursada')
-        self.assertContains(respuesta, 'Grupo sin cupo')
+        self.assertNotContains(respuesta, 'Materia ya cursada')
+        self.assertNotContains(respuesta, 'Grupo sin cupo')
+        self.assertNotContains(respuesta, 'Materias no disponibles')
         self.assertContains(respuesta, 'No hay materias disponibles')
+
+    def test_el_alumno_solo_ve_su_propia_carga_academica(self):
+        """El estudiante no cae en la vista restringida de la coordinación."""
+        self.client.force_login(self.estudiante)
+        respuesta = self.client.get(reverse('mi_inscripcion'))
+
+        self.assertContains(respuesta, reverse('mi_carga_academica'))
+        self.assertNotContains(respuesta, reverse('carga_de_alumno',
+                                                  args=[self.alumno.matricula]))
 
     def test_desinscribir_no_deja_num_alumnos_negativo(self):
         calificacion = Calificacion.objects.create(
@@ -517,10 +592,288 @@ class PruebasInscripcion(BaseSistema):
         self.assertEqual(self.grupo_1.num_alumnos, 0)
 
 
+class PruebasChoqueDeHorarios(BaseSistema):
+    """Un alumno no puede tomar dos grupos que se impartan a la misma hora."""
+
+    def setUp(self):
+        self.materia_3 = Materia.objects.create(
+            codigo='MAT103', nombre='Matemáticas III', unidades=4,
+            creditos=5, carrera=self.carrera)
+        # Mismo horario que grupo_1: choca de frente.
+        self.grupo_choque = Grupo.objects.create(
+            materia=self.materia_3, periodo=self.periodo, cupo=10,
+            num_alumnos=0, hora_inicio=time(8, 30), hora_fin=time(10, 0),
+            aula='A-202')
+        # Se traslapa un poco con grupo_1.
+        self.grupo_traslape = Grupo.objects.create(
+            materia=self.materia_3, periodo=self.periodo, cupo=10,
+            num_alumnos=0, hora_inicio=time(9, 0), hora_fin=time(10, 0),
+            aula='A-203')
+
+    def test_el_horario_se_calcula_desde_las_horas(self):
+        self.assertEqual(self.grupo_1.horario, '08:00 - 09:30')
+        self.assertEqual(self.grupo_1.turno_display, 'Matutino')
+        evening = Grupo.objects.create(
+            materia=self.materia_3, periodo=self.periodo, cupo=10,
+            hora_inicio=time(18, 0), hora_fin=time(19, 30), aula='A-204')
+        self.assertEqual(evening.turno_display, 'Vespertino')
+
+    def test_se_detecta_el_choque_entre_grupos(self):
+        self.assertTrue(self.grupo_1.se_choca_con(self.grupo_choque))
+        self.assertTrue(self.grupo_1.se_choca_con(self.grupo_traslape))
+        self.assertFalse(self.grupo_1.se_choca_con(self.grupo_2))
+
+    def test_el_servicio_rechaza_dos_materias_a_la_misma_hora(self):
+        with self.assertRaisesMessage(ErrorInscripcion, 'misma hora'):
+            inscribir_alumno(self.alumno, [self.grupo_1, self.grupo_choque])
+        self.assertEqual(Calificacion.objects.count(), 0)
+
+    def test_el_formulario_rechaza_dos_materias_a_la_misma_hora(self):
+        from .forms import InscripcionForm, grupos_inscribibles
+
+        opciones = grupos_inscribibles(self.alumno, self.periodo)
+        form = InscripcionForm(
+            {'grupos': [self.grupo_1.pk, self.grupo_choque.pk]},
+            opciones=opciones, alumno=self.alumno)
+
+        self.assertFalse(form.is_valid())
+        self.assertIn('misma hora', str(form.errors))
+
+    def test_no_se_puede_agregar_a_lo_que_ya_se_tiene(self):
+        """El coordinador tampoco cruza una materia nueva con la ya inscrita."""
+        Calificacion.objects.create(alumno=self.alumno, grupo=self.grupo_1)
+        Grupo.objects.filter(pk=self.grupo_1.pk).update(num_alumnos=1)
+
+        with self.assertRaisesMessage(ErrorInscripcion, 'choca con'):
+            inscribir_alumno(self.alumno, [self.grupo_choque], forzar=True)
+
+    def test_la_materia_que_choca_no_se_ofrece_en_la_pantalla(self):
+        Calificacion.objects.create(alumno=self.alumno, grupo=self.grupo_1)
+        Grupo.objects.filter(pk=self.grupo_1.pk).update(num_alumnos=1)
+
+        self.client.force_login(self.coordinador)
+        respuesta = self.client.get(
+            reverse('inscripcion_alumno', args=[self.alumno.matricula]))
+
+        ofrecidos = [str(grupo) for grupo in respuesta.context['form'].fields[
+            'grupos'].queryset]
+        self.assertNotIn(str(self.grupo_choque), ofrecidos)
+        self.assertNotIn(str(self.grupo_traslape), ofrecidos)
+        self.assertIn(str(self.grupo_2), ofrecidos)
+
+
+class PruebasHorariosDeGrupo(BaseSistema):
+    def test_el_horario_va_de_07_a_20(self):
+        valido = GrupoForm({
+            'materia': self.materia_1.pk, 'periodo': self.periodo.pk,
+            'hora_inicio': '07:00', 'hora_fin': '20:00', 'aula': 'A-9',
+            'cupo': 10, 'num_alumnos': 0,
+        })
+        self.assertTrue(valido.is_valid(), valido.errors)
+
+        for inicio, fin in [('06:59', '20:00'), ('07:00', '20:01'),
+                            ('21:00', '22:00')]:
+            with self.subTest(inicio=inicio, fin=fin):
+                form = GrupoForm({
+                    'materia': self.materia_1.pk, 'periodo': self.periodo.pk,
+                    'hora_inicio': inicio, 'hora_fin': fin, 'aula': 'A-9',
+                    'cupo': 10, 'num_alumnos': 0,
+                })
+                self.assertFalse(form.is_valid())
+
+    def test_la_hora_final_debe_ser_posterior(self):
+        form = GrupoForm({
+            'materia': self.materia_1.pk, 'periodo': self.periodo.pk,
+            'hora_inicio': '10:00', 'hora_fin': '09:00', 'aula': 'A-9',
+            'cupo': 10, 'num_alumnos': 0,
+        })
+        self.assertFalse(form.is_valid())
+        self.assertIn('hora_fin', form.errors)
+
+    def test_el_modelo_tambien_valida_el_rango(self):
+        grupo = Grupo(materia=self.materia_1, periodo=self.periodo, cupo=10,
+                      hora_inicio=time(6, 0), hora_fin=time(7, 0), aula='A-9')
+        with self.assertRaises(ValidationError):
+            grupo.full_clean()
+
+    def test_el_grupo_no_admite_mas_alumnos_que_cupo(self):
+        grupo = Grupo(materia=self.materia_1, periodo=self.periodo, cupo=5,
+                      num_alumnos=6, hora_inicio=time(7, 0),
+                      hora_fin=time(8, 30), aula='A-9')
+        with self.assertRaises(ValidationError):
+            grupo.full_clean()
+
+
+class PruebasFiltroDeAlumnos(BaseSistema):
+    def setUp(self):
+        Alumno.objects.create(matricula='20260003', nombre='Rita Sánchez',
+                               semestre=3, estatus='BAJA_TEMP',
+                               carrera=self.otra_carrera)
+
+    def alumnos_de(self, **consulta):
+        self.client.force_login(self.coordinador)
+        respuesta = self.client.get(reverse('alumno_list'), consulta)
+        self.assertEqual(respuesta.status_code, 200)
+        return [a.matricula for a in respuesta.context['alumnos']]
+
+    def test_sin_filtro_muestra_todos(self):
+        self.assertEqual(self.alumnos_de(),
+                         ['20260001', '20260002', '20260003'])
+
+    def test_filtra_por_matricula_nombre_o_carrera(self):
+        self.assertEqual(self.alumnos_de(q='20260002'), ['20260002'])
+        self.assertEqual(self.alumnos_de(q='Rita'), ['20260003'])
+        self.assertEqual(self.alumnos_de(q='Sistemas'), ['20260001',
+                                                         '20260002'])
+        self.assertEqual(self.alumnos_de(q='Contaduría'), ['20260003'])
+        self.assertEqual(self.alumnos_de(q='zzzz'), [])
+
+    def test_filtra_por_carrera_estatus_y_semestre(self):
+        self.assertEqual(self.alumnos_de(carrera=self.otra_carrera.pk),
+                         ['20260003'])
+        self.assertEqual(self.alumnos_de(estatus='BAJA_TEMP'), ['20260003'])
+        self.assertEqual(self.alumnos_de(semestre=3), ['20260003'])
+        self.assertEqual(self.alumnos_de(semestre=9), [])
+
+    def test_combina_filtros(self):
+        self.assertEqual(
+            self.alumnos_de(carrera=self.otra_carrera.pk, estatus='ACTIVO'),
+            [])
+
+    def test_el_filtro_marca_los_campos_del_formulario(self):
+        self.client.force_login(self.coordinador)
+        respuesta = self.client.get(reverse('alumno_list'),
+                                    {'q': 'Rita', 'semestre': '3'})
+
+        filtro = respuesta.context['filtro']
+        self.assertEqual(filtro.cleaned_data['q'], 'Rita')
+        self.assertEqual(filtro.cleaned_data['semestre'], 3)
+        self.assertTrue(respuesta.context['filtro_activo'])
+        self.assertContains(respuesta, 'Limpiar')
+
+
+class PruebasFiltroDeGrupos(BaseSistema):
+    def setUp(self):
+        self.grupo_anterior = Grupo.objects.create(
+            materia=self.materia_2, periodo=self.periodo_anterior, cupo=10,
+            num_alumnos=0, hora_inicio=time(15, 0), hora_fin=time(16, 30),
+            aula='D-1')
+
+    def grupos_de(self, **consulta):
+        self.client.force_login(self.coordinador)
+        respuesta = self.client.get(reverse('grupo_list'), consulta)
+        self.assertEqual(respuesta.status_code, 200)
+        return list(respuesta.context['grupos'])
+
+    def test_sin_filtro_muestra_el_periodo_vigente(self):
+        self.assertEqual(self.grupos_de(),
+                         [self.grupo_ajeno, self.grupo_1, self.grupo_2])
+        self.assertNotIn(self.grupo_anterior, Grupo.objects.filter(
+            periodo=self.periodo))
+
+    def test_al_elegir_un_periodo_solo_ve_sus_grupos(self):
+        grupos = self.grupos_de(periodo=self.periodo_anterior.pk)
+
+        self.assertEqual(grupos, [self.grupo_anterior])
+        self.assertNotIn(self.grupo_1, grupos)
+
+    def test_el_periodo_elegido_queda_marcado(self):
+        self.client.force_login(self.coordinador)
+        respuesta = self.client.get(
+            reverse('grupo_list'), {'periodo': self.periodo_anterior.pk})
+
+        self.assertEqual(respuesta.context['periodo_seleccionado'],
+                         self.periodo_anterior)
+
+    def test_un_periodo_inexistente_cae_en_el_vigente(self):
+        self.client.force_login(self.coordinador)
+        respuesta = self.client.get(reverse('grupo_list'), {'periodo': 999})
+
+        self.assertEqual(respuesta.context['periodo_seleccionado'],
+                         self.periodo)
+
+
+class PruebasListasVacias(BaseSistema):
+    """Una lista sin registros se avisa fuera de la tabla.
+
+    Poner el aviso como fila con `colspan` dentro de `tbody` hace que
+    DataTables la lea como una fila de datos de una sola columna y avise de
+    columnas desconocidas al abrir un periodo sin grupos.
+    """
+
+    LISTADOS = ['grupo_list', 'alumno_list', 'carrera_list', 'materia_list',
+                'periodo_list', 'usuario_list']
+
+    def test_ningun_listado_deja_una_fila_colspan(self):
+        for nombre in self.LISTADOS:
+            with self.subTest(listado=nombre):
+                self.client.force_login(self.admin)
+                respuesta = self.client.get(reverse(nombre))
+
+                self.assertEqual(respuesta.status_code, 200)
+                self.assertNotContains(respuesta, 'colspan=')
+
+    def test_el_periodo_sin_grupos_avisa_sin_tabla(self):
+        self.client.force_login(self.coordinador)
+        respuesta = self.client.get(reverse('grupo_list'),
+                                    {'periodo': self.periodo_anterior.pk})
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(respuesta, 'No hay grupos registrados')
+        self.assertNotContains(respuesta, 'tabla-grupos')
+
+    def test_un_filtro_sin_coincidencias_avisa_sin_tabla(self):
+        self.client.force_login(self.admin)
+        respuesta = self.client.get(reverse('alumno_list'),
+                                    {'q': 'no-existe-esta-matricula'})
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(respuesta, 'No hay alumnos que coincidan')
+        self.assertNotContains(respuesta, 'tabla-alumnos')
+
+    def test_con_registros_se_mantiene_la_tabla(self):
+        self.client.force_login(self.coordinador)
+        respuesta = self.client.get(reverse('grupo_list'))
+
+        self.assertContains(respuesta, 'tabla-grupos')
+        self.assertContains(respuesta, 'iniciarTabla')
+        self.assertNotContains(respuesta, 'class="vacio"')
+
+
+class PruebasBorradosProtegidos(BaseSistema):
+    def test_no_se_borra_una_materia_con_grupos(self):
+        self.client.force_login(self.admin)
+        respuesta = self.client.post(
+            reverse('materia_delete', args=[self.materia_1.codigo]),
+            follow=True)
+
+        self.assertRedirects(respuesta, reverse('materia_list'))
+        self.assertContains(respuesta, 'tiene grupos abiertos')
+        self.assertTrue(Materia.objects.filter(pk=self.materia_1.pk).exists())
+
+    def test_no_se_borra_una_carrera_con_materias(self):
+        self.client.force_login(self.admin)
+        respuesta = self.client.post(
+            reverse('carrera_delete', args=[self.carrera.pk]), follow=True)
+
+        self.assertRedirects(respuesta, reverse('carrera_list'))
+        self.assertContains(respuesta, 'tiene materias o alumnos')
+        self.assertTrue(Carrera.objects.filter(pk=self.carrera.pk).exists())
+
+    def test_no_se_borra_un_grupo_con_inscripciones(self):
+        Calificacion.objects.create(alumno=self.alumno, grupo=self.grupo_1)
+        self.client.force_login(self.coordinador)
+        respuesta = self.client.post(
+            reverse('grupo_delete', args=[self.grupo_1.pk]), follow=True)
+
+        self.assertRedirects(respuesta, reverse('grupo_list'))
+        self.assertContains(respuesta, 'alumnos inscritos')
+        self.assertTrue(Grupo.objects.filter(pk=self.grupo_1.pk).exists())
+
+
 class PruebasCargaAcademica(BaseSistema):
     def setUp(self):
-        Calificacion.objects.create(alumno=self.alumno, grupo=self.grupo_1,
-                                    valor=Decimal('9.0'))
+        self.calificar_todas_las_unidades(self.alumno, self.grupo_1, '90')
         Calificacion.objects.create(alumno=self.alumno, grupo=self.grupo_2)
 
     def test_coordinador_consulta_carga_de_cualquier_alumno(self):
@@ -529,8 +882,20 @@ class PruebasCargaAcademica(BaseSistema):
             reverse('carga_de_alumno', args=[self.alumno.matricula]))
         self.assertEqual(respuesta.status_code, 200)
         self.assertContains(respuesta, 'Matemáticas I')
-        self.assertContains(respuesta, 'Aprobada')
-        self.assertContains(respuesta, 'En curso')
+        self.assertContains(respuesta, 'Carga académica actual')
+
+    def test_el_historial_solo_aparece_en_el_cardex(self):
+        """La carga académica muestra el periodo vigente, no el historial."""
+        self.client.force_login(self.coordinador)
+        carga = self.client.get(
+            reverse('carga_de_alumno', args=[self.alumno.matricula]))
+
+        self.assertNotContains(carga, 'Historial de materias cursadas')
+        self.assertEqual(carga.context['materias_cursadas'], 2)
+
+        cardex = self.client.get(
+            reverse('alumno_cardex', args=[self.alumno.matricula]))
+        self.assertContains(cardex, 'Historial de materias cursadas')
 
     def test_estudiante_consulta_su_propia_carga(self):
         self.client.force_login(self.estudiante)
@@ -549,52 +914,226 @@ class PruebasCargaAcademica(BaseSistema):
         self.assertEqual(self.alumno.creditos_en_curso, 10)
         self.assertEqual(self.alumno.creditos_acumulados, 5)
         self.assertEqual(self.alumno.materias_cursadas, 2)
-        self.assertEqual(self.alumno.promedio_general, Decimal('9.0'))
+        self.assertEqual(self.alumno.promedio_general, Decimal('90.0'))
         self.assertTrue(self.alumno.tiene_carga_activa)
+
+    def test_la_carga_no_muestra_el_avance_de_la_carrera(self):
+        self.client.force_login(self.estudiante)
+        respuesta = self.client.get(reverse('mi_carga_academica'))
+
+        self.assertNotContains(respuesta, 'Avance de la carrera')
+        self.assertNotContains(respuesta, 'avance_carrera')
+
+
+class PruebasCalificacionPorUnidad(BaseSistema):
+    """La calificación final es el promedio de las unidades de la materia."""
+
+    def test_se_crea_una_unidad_por_cada_unidad_de_la_materia(self):
+        inscripcion = Calificacion.objects.create(
+            alumno=self.alumno, grupo=self.grupo_1)
+
+        CalificacionUnidad.objects.bulk_create([
+            CalificacionUnidad(calificacion=inscripcion, numero_unidad=numero)
+            for numero in range(1, self.materia_1.unidades + 1)
+        ])
+
+        unidades = list(inscripcion.unidades)
+        self.assertEqual(len(unidades), self.materia_1.unidades)
+        self.assertEqual([u.numero_unidad for u in unidades], [1, 2, 3, 4])
+
+    def test_el_promedio_es_el_de_las_unidades(self):
+        inscripcion = self.calificar(self.alumno, self.grupo_1,
+                                     [Decimal('100'), Decimal('90'),
+                                      Decimal('80'), Decimal('70')])
+
+        self.assertEqual(inscripcion.valor_promedio, Decimal('85.0'))
+        self.assertTrue(inscripcion.unidades_completas)
+
+    def test_solo_cuenta_el_promedio_de_las_unidades_capturadas(self):
+        inscripcion = self.calificar(self.alumno, self.grupo_1,
+                                     [Decimal('100'), Decimal('60')])
+
+        self.assertEqual(inscripcion.valor_promedio, Decimal('80.0'))
+        self.assertFalse(inscripcion.unidades_completas)
+
+    def test_sin_unidades_calificadas_no_hay_calificacion_final(self):
+        inscripcion = Calificacion.objects.create(
+            alumno=self.alumno, grupo=self.grupo_1)
+
+        self.assertIsNone(inscripcion.valor_promedio)
+        self.assertFalse(inscripcion.esta_calificada)
+        self.assertFalse(inscripcion.es_aprobada)
+
+    def test_el_rango_de_aprobado_es_de_70_a_100(self):
+        inscripcion = Calificacion.objects.create(
+            alumno=self.alumno, grupo=self.grupo_1)
+        unidades = list(CalificacionUnidad.objects.bulk_create([
+            CalificacionUnidad(calificacion=inscripcion, numero_unidad=numero)
+            for numero in range(1, self.materia_1.unidades + 1)
+        ]))
+
+        def promedio_con(valor):
+            for unidad in unidades:
+                unidad.valor = Decimal(valor)
+                unidad.save(update_fields=['valor'])
+            inscripcion.refresh_from_db()
+            return inscripcion.valor_promedio
+
+        self.assertEqual(promedio_con('70'), Decimal('70.0'))
+        self.assertTrue(inscripcion.es_aprobada)
+        self.assertFalse(inscripcion.es_reprobada)
+
+        self.assertEqual(promedio_con('100'), Decimal('100.0'))
+        self.assertTrue(inscripcion.es_aprobada)
+
+        self.assertEqual(promedio_con('69.9'), Decimal('69.9'))
+        self.assertFalse(inscripcion.es_aprobada)
+        self.assertTrue(inscripcion.es_reprobada)
+
+    def test_el_promedio_general_usa_las_calificaciones_finales(self):
+        self.calificar_todas_las_unidades(self.alumno, self.grupo_1, '80')
+        self.calificar(self.alumno, self.grupo_2,
+                       [Decimal('100'), Decimal('100')])
+
+        self.alumno.refresh_from_db()
+        # Promedios finales: 80.0 y 100.0 (las unidades 3 y 4 sin calificar).
+        self.assertEqual(self.alumno.promedio_general, Decimal('90.0'))
+
+    def test_la_inscripcion_crea_sus_unidades(self):
+        inscribir_alumno(self.alumno, [self.grupo_1])
+
+        inscripcion = Calificacion.objects.get(alumno=self.alumno,
+                                               grupo=self.grupo_1)
+        self.assertEqual(inscripcion.calificaciones_unidad.count(),
+                         self.materia_1.unidades)
+
+    def test_no_se_repite_el_numero_de_unidad(self):
+        inscripcion = Calificacion.objects.create(
+            alumno=self.alumno, grupo=self.grupo_1)
+        CalificacionUnidad.objects.create(calificacion=inscripcion,
+                                          numero_unidad=1)
+        repetida = CalificacionUnidad(calificacion=inscripcion,
+                                      numero_unidad=1)
+        with self.assertRaises(ValidationError):
+            repetida.full_clean()
 
 
 class PruebasCardex(BaseSistema):
-    def test_coordinador_guarda_calificaciones_finales(self):
-        Calificacion.objects.create(alumno=self.alumno, grupo=self.grupo_1)
-        self.client.force_login(self.coordinador)
-        url = reverse('alumno_cardex', args=[self.alumno.matricula])
-        respuesta = self.client.get(url)
-        calificacion_id = respuesta.context['formset'].forms[0]['id'].value()
+    def setUp(self):
+        self.inscripcion = Calificacion.objects.create(
+            alumno=self.alumno, grupo=self.grupo_1)
+        self.url = reverse('alumno_cardex', args=[self.alumno.matricula])
 
-        respuesta = self.client.post(url, {
-            'form-TOTAL_FORMS': '1',
-            'form-INITIAL_FORMS': '1',
-            'form-MIN_NUM_FORMS': '0',
-            'form-MAX_NUM_FORMS': '1000',
-            f'form-0-id': calificacion_id,
-            'form-0-valor': '7.5',
-        })
+    def datos_del_formulario(self, valores):
+        """Abre el cardex y arma el POST con una calificación por unidad."""
+        respuesta = self.client.get(self.url)
+        formset = respuesta.context['formset']
+        datos = {
+            formset.add_prefix('TOTAL_FORMS'): str(formset.total_form_count()),
+            formset.add_prefix('INITIAL_FORMS'): str(
+                formset.initial_form_count()),
+            formset.add_prefix('MIN_NUM_FORMS'): '0',
+            formset.add_prefix('MAX_NUM_FORMS'): '1000',
+        }
+        for indice, form in enumerate(formset.forms):
+            prefijo = formset.add_prefix(str(indice))
+            datos[f'{prefijo}-id'] = str(form.instance.pk)
+            if indice < len(valores):
+                datos[f'{prefijo}-valor'] = valores[indice]
+        return datos
+
+    def test_el_cardex_crea_las_unidades_de_la_materia(self):
+        self.client.force_login(self.coordinador)
+        self.client.get(self.url)
+
+        self.assertEqual(
+            CalificacionUnidad.objects.filter(calificacion=self.inscripcion)
+            .count(), self.materia_1.unidades)
+
+    def test_coordinador_guarda_calificaciones_por_unidad(self):
+        self.client.force_login(self.coordinador)
+        datos = self.datos_del_formulario(['100', '90', '80', '70'])
+
+        respuesta = self.client.post(self.url, datos)
 
         self.assertEqual(respuesta.status_code, 302)
-        calificacion = Calificacion.objects.get(alumno=self.alumno,
-                                                grupo=self.grupo_1)
-        self.assertEqual(calificacion.valor, Decimal('7.5'))
+        calificacion = Calificacion.objects.get(pk=self.inscripcion.pk)
+        self.assertEqual(calificacion.valor_promedio, Decimal('85.0'))
+        self.assertTrue(calificacion.es_aprobada)
+        self.assertTrue(calificacion.unidades_completas)
         self.assertIsNotNone(calificacion.fecha_captura)
 
-    def test_rechaza_calificacion_fuera_de_rango(self):
-        Calificacion.objects.create(alumno=self.alumno, grupo=self.grupo_1)
+    def test_una_materia_reprobada_no_suma_creditos(self):
+        self.calificar_todas_las_unidades(self.alumno, self.grupo_2, '60')
         self.client.force_login(self.coordinador)
-        url = reverse('alumno_cardex', args=[self.alumno.matricula])
-        respuesta = self.client.get(url)
-        calificacion_id = respuesta.context['formset'].forms[0]['id'].value()
+        datos = self.datos_del_formulario(['60'] * (self.materia_1.unidades
+                                                    + self.materia_2.unidades))
 
-        respuesta = self.client.post(url, {
-            'form-TOTAL_FORMS': '1',
-            'form-INITIAL_FORMS': '1',
-            'form-MIN_NUM_FORMS': '0',
-            'form-MAX_NUM_FORMS': '1000',
-            f'form-0-id': calificacion_id,
-            'form-0-valor': '12',
-        })
+        self.client.post(self.url, datos)
+
+        self.alumno.refresh_from_db()
+        self.assertEqual(self.alumno.creditos_acumulados, 0)
+        self.assertEqual(len(self.alumno.materias_reprobadas), 2)
+
+    def test_rechaza_calificacion_fuera_de_rango(self):
+        self.client.force_login(self.coordinador)
+        datos = self.datos_del_formulario(['120', '80', '80', '80'])
+
+        respuesta = self.client.post(self.url, datos)
 
         self.assertEqual(respuesta.status_code, 200)
-        self.assertEqual(
-            Calificacion.objects.get(grupo=self.grupo_1).valor, None)
+        self.inscripcion.refresh_from_db()
+        self.assertIsNone(self.inscripcion.valor_promedio)
+
+    def test_el_cardex_muestra_el_historial_de_materias_cursadas(self):
+        self.calificar_todas_las_unidades(self.alumno, self.grupo_2, '95')
+        self.client.force_login(self.coordinador)
+
+        respuesta = self.client.get(self.url)
+
+        historial = respuesta.context['historial_completado']
+        self.assertEqual([c.grupo_id for c in historial], [self.grupo_2.pk])
+        self.assertContains(respuesta, 'Historial de materias cursadas')
+
+    def test_la_calificacion_final_se_actualiza_al_abrir_el_cardex(self):
+        """Con todas las unidades capturadas, la columna muestra el promedio."""
+        self.client.force_login(self.coordinador)
+        self.datos_del_formulario(['100', '90', '80', '70'])
+        self.client.post(self.url, self.datos_del_formulario(
+            ['100', '90', '80', '70']))
+
+        respuesta = self.client.get(self.url)
+
+        fila = respuesta.context['filas_captura'][0]
+        self.assertEqual(fila['valor'], Decimal('85.0'))
+        self.assertTrue(fila['aprobada'])
+        self.assertTrue(fila['completa'])
+        self.assertContains(respuesta, '85.0')
+
+    def test_una_unidad_invalida_deja_la_materia_incompleta(self):
+        """Si una unidad no pasa la validación, el promedio ignora ese valor."""
+        self.client.force_login(self.coordinador)
+        datos = self.datos_del_formulario(['120', '80', '80', '80'])
+
+        respuesta = self.client.post(self.url, datos)
+
+        self.assertEqual(respuesta.status_code, 200)
+        fila = respuesta.context['filas_captura'][0]
+        self.assertEqual(fila['valor'], Decimal('80.0'))
+        self.assertTrue(fila['aprobada'])
+        self.assertFalse(fila['completa'])
+
+    def test_cambiar_las_unidades_de_la_materia_ajusta_el_cardex(self):
+        self.calificar(self.alumno, self.grupo_2, [Decimal('95')])
+        self.client.force_login(self.coordinador)
+
+        self.materia_2.unidades = 2
+        self.materia_2.save(update_fields=['unidades'])
+        self.client.get(self.url)
+
+        inscripcion = Calificacion.objects.get(alumno=self.alumno,
+                                               grupo=self.grupo_2)
+        self.assertEqual(inscripcion.calificaciones_unidad.count(), 2)
 
 
 class PruebasPeriodos(BaseSistema):
@@ -623,7 +1162,27 @@ class PruebasPeriodos(BaseSistema):
             'periodo': self.periodo_anterior.pk,
             'siguiente': reverse('grupo_list'),
         })
+
         self.assertRedirects(respuesta, reverse('grupo_list'))
+
+    def test_al_activar_un_periodo_el_filtro_de_grupos_lo_sigue(self):
+        """El filtro `?periodo=` de la tabla se actualiza al cambiar el vigente."""
+        self.client.force_login(self.coordinador)
+        destino = f"{reverse('grupo_list')}?periodo={self.periodo.pk}"
+
+        respuesta = self.client.post(reverse('periodo_activar'), {
+            'periodo': self.periodo_anterior.pk, 'siguiente': destino})
+
+        self.assertRedirects(respuesta,
+                             f"{reverse('grupo_list')}?periodo="
+                             f"{self.periodo_anterior.pk}",
+                             fetch_redirect_response=False)
+        self.assertEqual(Periodo.actual().pk, self.periodo_anterior.pk)
+
+        # Y la tabla ya muestra los grupos del periodo nuevo.
+        pagina = self.client.get(respuesta.url)
+        self.assertEqual(pagina.context['periodo_seleccionado'],
+                         self.periodo_anterior)
 
     def test_el_periodo_activo_aparece_en_el_encabezado(self):
         self.client.force_login(self.coordinador)
@@ -786,3 +1345,38 @@ class PruebasUsuarios(BaseSistema):
         self.assertEqual(respuesta.status_code, 200)
         self.assertTrue(self.client.login(username='20260001',
                                           password='clave-de-prueba'))
+
+
+class PruebasSembrarDemo(BaseSistema):
+    """El comando `sembrar_demo` deja el sistema listo para probar."""
+
+    def ejecutar(self, **opciones):
+        return call_command('sembrar_demo', stdout=StringIO(), **opciones)
+
+    def test_crea_los_usuarios_y_el_periodo_de_demo(self):
+        self.ejecutar()
+
+        coordinador = User.objects.get(username='coordinador')
+        self.assertEqual(coordinador.perfil.rol, 'COORDINADOR')
+        self.assertTrue(self.client.login(username='coordinador',
+                                          password='coordinador123'))
+        self.assertEqual(Perfil.objects.get(
+            alumno=self.alumno).rol, 'ESTUDIANTE')
+
+        periodo = Periodo.objects.get(nombre='2026-2')
+        self.assertFalse(periodo.activo)
+        self.assertEqual(Grupo.objects.filter(periodo=periodo).count(), 3)
+
+    def test_se_puede_ejecutar_dos_veces_sin_duplicar(self):
+        self.ejecutar()
+        self.ejecutar(activar=True)
+
+        self.assertEqual(Periodo.objects.filter(nombre='2026-2').count(), 1)
+        self.assertEqual(Grupo.objects.filter(
+            periodo__nombre='2026-2').count(), 3)
+        self.assertEqual(Periodo.actual().nombre, '2026-2')
+
+    def test_no_hace_nada_si_no_hay_alumnos(self):
+        Alumno.objects.all().delete()
+        with self.assertRaises(SystemExit):
+            self.ejecutar()

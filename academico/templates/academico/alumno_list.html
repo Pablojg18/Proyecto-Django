@@ -13,6 +13,24 @@
 </div>
 
 <div class="contenedor">
+    <form method="get" class="filtros">
+        {{ filtro.q }}
+        {{ filtro.carrera }}
+        {{ filtro.estatus }}
+        {{ filtro.semestre }}
+        <button type="submit" class="boton">Filtrar</button>
+        {% if filtro_activo %}
+        <a class="boton secundario" href="{% url 'alumno_list' %}">Limpiar</a>
+        {% endif %}
+    </form>
+    <p class="ayuda">
+        {{ alumnos|length }} alumno(s){% if periodo_activo %} en el periodo
+        vigente {{ periodo_activo.nombre }}{% endif %}.
+    </p>
+</div>
+
+<div class="contenedor">
+    {% if alumnos %}
     <table id="tabla-alumnos" class="display" style="width:100%">
         <thead>
             <tr>
@@ -50,30 +68,25 @@
                     </div>
                 </td>
             </tr>
-            {% empty %}
-            <tr><td colspan="8">Sin registros</td></tr>
             {% endfor %}
         </tbody>
     </table>
+    {% else %}
+    <p class="vacio">No hay alumnos que coincidan con los filtros seleccionados.</p>
+    {% endif %}
 </div>
 {% endblock %}
 
 {% block scripts %}
+{% if alumnos %}
 <script>
-    const columnasExport = { columns: [0, 1, 2, 3, 4, 5, 6] };
-    new DataTable('#tabla-alumnos', {
-        pageLength: 10,
-        language: { url: 'https://cdn.datatables.net/plug-ins/2.2.2/i18n/es-MX.json' },
-        dom: 'Bfrtip',
-        columnDefs: [
-            { targets: '.columna-numerica', type: 'num' },
-            { targets: '.columna-acciones', orderable: false, searchable: false }
-        ],
+    iniciarTabla('#tabla-alumnos', {
         buttons: [
-            { extend: 'excelHtml5', text: 'Exportar a Excel', title: 'Alumnos', exportOptions: columnasExport },
-            { extend: 'csv', exportOptions: columnasExport },
-            { extend: 'print', exportOptions: columnasExport }
+            { extend: 'excelHtml5', text: 'Exportar a Excel', title: 'Alumnos' },
+            { extend: 'csv' },
+            { extend: 'print' }
         ]
     });
 </script>
+{% endif %}
 {% endblock %}

@@ -8,8 +8,6 @@ from django.shortcuts import redirect
 
 from .models import Perfil
 
-TODOS_LOS_ROLES = ('ADMINISTRADOR', 'COORDINADOR', 'ESTUDIANTE')
-
 
 def perfil_de(usuario):
     """Perfil del usuario o None si todavía no tiene rol asignado."""
@@ -68,11 +66,3 @@ class RolRequeridoMixin:
         if rol_de(request.user) not in self.roles_permitidos:
             return sin_permiso(request)
         return super().dispatch(request, *args, **kwargs)
-
-
-def es_alumno_del_usuario(usuario, alumno):
-    """True si el usuario es ese alumno, o si tiene alcance total."""
-    if usuario.is_superuser:
-        return True
-    perfil = perfil_de(usuario)
-    return bool(perfil and perfil.alumno_id == alumno.pk)

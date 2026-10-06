@@ -3,7 +3,7 @@
 {% block titulo %}{% if solo_lectura %}Mi cardex{% else %}Cardex de {{ alumno.matricula }}{% endif %}{% endblock %}
 
 {% block contenido %}
-<h1>{% if solo_lectura %}Mi cardex{% else %}Calificaciones finales{% endif %}</h1>
+<h1>{% if solo_lectura %}Mi cardex{% else %}Calificaciones por unidad{% endif %}</h1>
 {% if solo_lectura %}
     <a class="volver" href="{% url 'index' %}">&larr; Volver al inicio</a>
 {% else %}
@@ -17,55 +17,109 @@
         <tr><th>Semestre:</th><td>{{ alumno.semestre }}</td></tr>
         <tr><th>Especialidad:</th><td>{{ alumno.especialidad|default:"—" }}</td></tr>
         <tr><th>Estatus:</th><td>{{ alumno.get_estatus_display }}</td></tr>
-        <tr><th>Materias cursadas:</th><td>{{ alumno.materias_cursadas }}</td></tr>
-        <tr><th>Créditos acumulados:</th><td>{{ alumno.creditos_acumulados }}</td></tr>
-        <tr><th>Promedio general:</th><td>{% if alumno.promedio_general is not None %}{{ alumno.promedio_general }}{% else %}—{% endif %}</td></tr>
+        <tr><th>Materias cursadas:</th><td>{{ materias_cursadas }}</td></tr>
+        <tr><th>Aprobadas / reprobadas:</th><td>{{ materias_aprobadas }} / {{ materias_reprobadas }}</td></tr>
+        <tr><th>Créditos acumulados:</th><td>{{ creditos_acumulados }}</td></tr>
+        <tr><th>Promedio general:</th><td>{% if promedio_general is not None %}{{ promedio_general }}{% else %}—{% endif %}</td></tr>
     </table>
 </div>
 
 {% if solo_lectura %}
-    <div class="contenedor">
-        <p class="ayuda">
-            Este es tu historial. Las calificaciones las captura la coordinación
-            de la escuela; si ves un error, comunícate con ella.
-        </p>
-        <table>
-            <thead>
-                <tr>
-                    <th>Periodo</th>
-                    <th>Código</th>
-                    <th>Materia</th>
-                    <th>Turno</th>
-                    <th>Horario</th>
-                    <th class="numero">Créditos</th>
-                    <th class="numero">Calificación</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for c in calificaciones %}
-                <tr>
-                    <td>{{ c.grupo.periodo }}</td>
-                    <td>{{ c.grupo.materia.codigo }}</td>
-                    <td>{{ c.grupo.materia.nombre }}</td>
-                    <td>{{ c.grupo.get_turno_display }}</td>
-                    <td>{{ c.grupo.horario }}</td>
-                    <td class="numero">{{ c.grupo.materia.creditos }}</td>
-                    <td class="numero">
-                        {% if c.valor is not None %}
-                            {{ c.valor }}
-                            {% if c.es_aprobada %}<span class="etiqueta-estado ok">Aprobada</span>
-                            {% else %}<span class="etiqueta-estado no">Reprobada</span>{% endif %}
-                        {% else %}
-                            <span class="no-disponible">Sin calificar</span>
-                        {% endif %}
-                    </td>
-                </tr>
-                {% empty %}
-                <tr><td colspan="7">Todavía no tienes materias registradas.</td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+<div class="contenedor">
+    <p class="ayuda">
+        La calificación final de cada materia es el promedio de sus unidades.
+        De {{ aprobada_minimo }} a {{ calificacion_maxima }} es aprobada y de
+        0 a menos de {{ aprobada_minimo }} es reprobada. La coordinación de la
+        escuela captura las calificaciones; si ves un error, comunícate con ella.
+    </p>
+    <table>
+        <thead>
+            <tr>
+                <th>Periodo</th>
+                <th>Código</th>
+                <th>Materia</th>
+                <th>Turno</th>
+                <th>Horario</th>
+                <th class="numero">Créditos</th>
+                <th>Unidades</th>
+                <th class="numero">Calificación final</th>
+                <th>Situación</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for c in calificaciones %}
+            <tr>
+                <td>{{ c.grupo.periodo }}</td>
+                <td>{{ c.grupo.materia.codigo }}</td>
+                <td>{{ c.grupo.materia.nombre }}</td>
+                <td>{{ c.grupo.turno_display }}</td>
+                <td>{{ c.grupo.horario }}</td>
+                <td class="numero">{{ c.grupo.materia.creditos }}</td>
+                <td>
+                    {% for u in c.unidades %}<span class="unidad">U{{ u.numero_unidad }}: {% if u.valor is not None %}{{ u.valor }}{% else %}—{% endif %}</span>{% if not forloop.last %} · {% endif %}{% endfor %}
+                </td>
+                <td class="numero">{% if c.valor_promedio is not None %}{{ c.valor_promedio }}{% else %}—{% endif %}</td>
+                <td>
+                    {% if c.esta_calificada %}
+                        {% if c.es_aprobada %}<span class="etiqueta-estado ok">Aprobada</span>
+                        {% else %}<span class="etiqueta-estado no">Reprobada</span>{% endif %}
+                    {% else %}
+                        <span class="etiqueta-estado">En curso</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="9">Todavía no tienes materias registradas.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="contenedor">
+    <h2>Historial de materias cursadas</h2>
+    {% if historial_completado %}
+    <p class="ayuda">Materias ya calificadas, de la más reciente a la más antigua.</p>
+    <table>
+        <thead>
+            <tr>
+                <th>Periodo</th>
+                <th>Código</th>
+                <th>Materia</th>
+                <th class="numero">Créditos</th>
+                <th class="numero">Calificación</th>
+                <th>Resultado</th>
+                <th>Capturada</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for c in historial_completado %}
+            <tr>
+                <td>{{ c.grupo.periodo }}</td>
+                <td>{{ c.grupo.materia.codigo }}</td>
+                <td>{{ c.grupo.materia.nombre }}</td>
+                <td class="numero">{{ c.grupo.materia.creditos }}</td>
+                <td class="numero">{{ c.valor_promedio }}</td>
+                <td>
+                    {% if c.es_aprobada %}<span class="etiqueta-estado ok">Aprobada</span>
+                    {% else %}<span class="etiqueta-estado no">Reprobada</span>{% endif %}
+                </td>
+                <td>{{ c.fecha_captura|default:"—" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr>
+                <th colspan="3">Total de créditos aprobados</th>
+                <th class="numero">{{ creditos_acumulados }}</th>
+                <th class="numero">{{ promedio_general|default_if_none:"—" }}</th>
+                <th colspan="2">Promedio general</th>
+            </tr>
+        </tfoot>
+    </table>
+    {% else %}
+    <p class="no-disponible">Todavía no hay materias con calificación final.</p>
+    {% endif %}
+</div>
 {% else %}
 <form method="post">
     {% csrf_token %}
@@ -78,7 +132,12 @@
     {% endif %}
 
     <div class="contenedor">
-        <p class="ayuda">Captura la calificación final de cada materia (0 a 10). Al guardar se registra la fecha de captura.</p>
+        <p class="ayuda">
+            Captura la calificación de cada unidad (0 a {{ calificacion_maxima }}).
+            La calificación final es el promedio de las unidades: de
+            {{ aprobada_minimo }} a {{ calificacion_maxima }} es aprobada.
+            Deja en blanco lo que todavía no se califica.
+        </p>
         <table>
             <thead>
                 <tr>
@@ -89,27 +148,40 @@
                     <th>Horario</th>
                     <th>Aula</th>
                     <th class="numero">Créditos</th>
-                    <th>Calificación final</th>
+                    <th>Unidades</th>
+                    <th class="numero">Calificación final</th>
                 </tr>
             </thead>
             <tbody>
-                {% for form in formset %}
+                {% for fila in filas_captura %}
                 <tr>
-                    <td>{{ form.instance.grupo.materia.codigo }}</td>
-                    <td>{{ form.instance.grupo.materia.nombre }}</td>
-                    <td>{{ form.instance.grupo.periodo }}</td>
-                    <td>{{ form.instance.grupo.get_turno_display }}</td>
-                    <td>{{ form.instance.grupo.horario }}</td>
-                    <td>{{ form.instance.grupo.aula|default:"—" }}</td>
-                    <td class="numero">{{ form.instance.grupo.materia.creditos }}</td>
-                    <td>
-                        {{ form.id }}
-                        {{ form.valor }}
+                    <td>{{ fila.calificacion.grupo.materia.codigo }}</td>
+                    <td>{{ fila.calificacion.grupo.materia.nombre }}</td>
+                    <td>{{ fila.calificacion.grupo.periodo }}</td>
+                    <td>{{ fila.calificacion.grupo.turno_display }}</td>
+                    <td>{{ fila.calificacion.grupo.horario }}</td>
+                    <td>{{ fila.calificacion.grupo.aula|default:"—" }}</td>
+                    <td class="numero">{{ fila.calificacion.grupo.materia.creditos }}</td>
+                    <td class="celda-unidades">
+                        {% for form in fila.forms %}
+                        <label for="{{ form.id_for_label }}">U{{ form.instance.numero_unidad }}</label>
+                        {{ form.id }}{{ form.valor }}
                         {% if form.valor.errors %}<span class="error-campo">{{ form.valor.errors|striptags }}</span>{% endif %}
+                        {% endfor %}
+                    </td>
+                    <td class="numero">
+                        {% if fila.valor is not None %}
+                            {{ fila.valor }}
+                            {% if fila.aprobada %}<span class="etiqueta-estado ok">Aprobada</span>
+                            {% else %}<span class="etiqueta-estado no">Reprobada</span>{% endif %}
+                            {% if not fila.completa %}<br><span class="no-disponible">Incompleta</span>{% endif %}
+                        {% else %}
+                            <span class="no-disponible">Sin calificar</span>
+                        {% endif %}
                     </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="8">Sin materias cursadas</td></tr>
+                <tr><td colspan="9">Sin materias cursadas</td></tr>
                 {% endfor %}
             </tbody>
         </table>
@@ -119,5 +191,42 @@
         {% endif %}
     </div>
 </form>
+
+<div class="contenedor">
+    <h2>Historial de materias cursadas</h2>
+    {% if historial_completado %}
+    <table>
+        <thead>
+            <tr>
+                <th>Periodo</th>
+                <th>Código</th>
+                <th>Materia</th>
+                <th class="numero">Créditos</th>
+                <th class="numero">Calificación</th>
+                <th>Resultado</th>
+                <th>Capturada</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for c in historial_completado %}
+            <tr>
+                <td>{{ c.grupo.periodo }}</td>
+                <td>{{ c.grupo.materia.codigo }}</td>
+                <td>{{ c.grupo.materia.nombre }}</td>
+                <td class="numero">{{ c.grupo.materia.creditos }}</td>
+                <td class="numero">{{ c.valor_promedio }}</td>
+                <td>
+                    {% if c.es_aprobada %}<span class="etiqueta-estado ok">Aprobada</span>
+                    {% else %}<span class="etiqueta-estado no">Reprobada</span>{% endif %}
+                </td>
+                <td>{{ c.fecha_captura|default:"—" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="no-disponible">Todavía no hay materias con calificación final.</p>
+    {% endif %}
+</div>
 {% endif %}
 {% endblock %}

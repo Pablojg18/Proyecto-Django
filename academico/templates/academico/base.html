@@ -30,6 +30,9 @@
         th { background: #eef; }
         table.plana th, table.plana td { border: 0; padding: .25rem 0; }
         .numero { text-align: right; }
+        /* Aviso que sustituye a la tabla cuando la lista no tiene registros:
+           una fila con `colspan` dentro de `tbody` confunde a DataTables. */
+        .vacio { margin: 0; padding: 2.5rem 1rem; text-align: center; color: #666; background: #fff; border: 1px dashed #ccc; border-radius: 6px; }
         .acciones { display: flex; gap: .4rem; flex-wrap: wrap; }
         .boton { display: inline-block; padding: .3rem .7rem; background: var(--verde); color: #fff !important; text-decoration: none; border: 0; border-radius: 4px; font-size: .85rem; cursor: pointer; }
         .boton:hover { background: var(--verde-oscuro); }
@@ -71,6 +74,11 @@
         .selector-periodo { display: flex; align-items: center; gap: .4rem; font-size: .88rem; }
         .selector-periodo select { padding: .25rem .4rem; border-radius: 4px; border: 1px solid #8aa; }
         .selector-periodo .vigente { color: #9fe8bf; font-weight: 600; }
+        .celda-unidades { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
+        .celda-unidades label { display: inline-block; font-size: .8rem; color: #555; }
+        .celda-unidades input { width: 4.5rem; }
+        .campo-calificacion { width: 4.5rem; }
+        .unidad { font-size: .85rem; color: #333; white-space: nowrap; }
     </style>
 </head>
 <body>
@@ -146,8 +154,37 @@
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script src="https://cdn.datatables.net/2.2.2/js/dataTables.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<script src="https://cdn.datatables.net/buttons/3.2.3/js/dataTables.buttons.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/3.2.3/js/buttons.dataTables.min.js"></script>
 <script src="https://cdn.datatables.net/buttons/3.2.3/js/buttons.html5.min.js"></script>
+<script>
+// Todas las listas usan la misma configuración. `iniciarTabla` destruye la
+// instancia previa si el script llega a ejecutarse dos veces sobre la misma
+// tabla: sin eso, DataTables intenta leer columnas de una tabla ya
+// transformada y avisa "Requested unknown parameter".
+function iniciarTabla(selector, opciones) {
+    const tabla = $(selector);
+    if (tabla.length === 0) {
+        return null;
+    }
+    if (DataTable.isDataTable(selector)) {
+        DataTable(selector).destroy(false);
+    }
+    return new DataTable(selector, Object.assign({
+        pageLength: 10,
+        language: { url: 'https://cdn.datatables.net/plug-ins/2.2.2/i18n/es-MX.json' },
+        dom: 'Bfrtip',
+        columnDefs: [
+            { targets: '.columna-numerica', type: 'num' },
+            { targets: '.columna-acciones', orderable: false, searchable: false }
+        ],
+        buttons: [
+            { extend: 'excelHtml5', text: 'Exportar a Excel' },
+            { extend: 'csv' },
+            { extend: 'print' }
+        ]
+    }, opciones || {}));
+}
+</script>
 {% block scripts %}{% endblock %}
 </body>
 </html>
