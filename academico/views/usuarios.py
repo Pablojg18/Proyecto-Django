@@ -1,18 +1,24 @@
-"""Gestión de usuarios del sistema y del acceso de los alumnos."""
+"""Gestión de usuarios del sistema y del acceso de los alumnos.
+
+Las pantallas de alta, edición y contraseña comparten una sola plantilla
+(`usuarios_form.html`) y el mismo esqueleto: mostrar el formulario, guardarlo si
+es válido y volver al listado.
+"""
 
 from django.contrib import messages
 from django.contrib.auth.models import User
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
-from django.views.generic import DeleteView, ListView, View
+from django.views.generic import DeleteView, ListView
 
 from ..forms import (AlumnoForm, AlumnosSinUsuario, PasswordForm,
                      UsuarioEdicionForm, UsuarioPersonalForm,
-                     roles_que_pueden_asignar)
-from ..models import Alumno, Perfil
+                     alumnos_sin_usuario, roles_que_pueden_asignar)
+from ..models import Perfil
 from ..permisos import RolRequeridoMixin, requiere_rol
 
 ROLES_GESTION_USUARIOS = ('ADMINISTRADOR', 'COORDINADOR')
+FORMULARIO = 'academico/usuarios_form.html'
 
 
 class BaseUsuarios(RolRequeridoMixin):
@@ -30,167 +36,6 @@ class UsuarioListView(BaseUsuarios, ListView):
         return (Perfil.objects
                 .select_related('usuario', 'alumno')
                 .order_by('rol', 'usuario__username'))
-
-
-class UsuarioTipoView(BaseUsuarios, View):
-    """Paso 1: elegir qué tipo de usuario se va a crear."""
-
-    def get(self, request):
-        return render(request, 'academico/usuarios_tipo.html', {
-            'sin_usuario': Alumno.objects.filter(
-                perfil_de_alumno__isnull=True).count(),
-        })
-
-
-class UsuarioAlumnoCreateView(BaseUsuarios, View):
-    """Alta de alumno: se crean el alumno, su usuario y su rol."""
-
-    def get(self, request):
-        return self.render_form(AlumnoForm())
-
-    def post(self, request):
-        form = AlumnoForm(request.POST)
-        if form.is_valid():
-            alumno = form.save()
-            messages.success(
-                request,
-                f'Alumno {alumno.matricula} dado de alta. Ya puede iniciar '
-                f'sesión con su matrícula y la contraseña asignada.'
-            )
-            return redirect('usuario_list')
-        return self.render_form(form)
-
-    def render_form(self, form):
-        return render(self.request, 'academico/usuarios_alumno.html', {
-            'form': form,
-            'titulo': 'Alta de alumno',
-            'volver': reverse('usuario_list'),
-            'sin_usuario': Alumno.objects.filter(
-                perfil_de_alumno__isnull=True).count(),
-        })
-
-
-class UsuarioAlumnoExistenteCreateView(BaseUsuarios, View):
-    """Da de acceso a un alumno que ya existía sin usuario."""
-
-    def get(self, request):
-        return self.render_form(AlumnosSinUsuario())
-
-    def post(self, request):
-        form = AlumnosSinUsuario(request.POST)
-        if form.is_valid():
-            usuario = form.save()
-            messages.success(
-                request,
-                f'{usuario.username} ya puede iniciar sesión como estudiante.'
-            )
-            return redirect('usuario_list')
-        return self.render_form(form)
-
-    def render_form(self, form):
-        return render(self.request, 'academico/usuarios_alumno_existente.html',
-                      {'form': form, 'titulo': 'Dar acceso a un alumno',
-                       'volver': reverse('usuario_list')})
-
-
-class UsuarioPersonalCreateView(BaseUsuarios, View):
-    """Alta de coordinador o administrador."""
-
-    def get(self, request):
-        return self.render_form(self.form_vacio())
-
-    def post(self, request):
-        form = self.form_con_datos(request.POST)
-        if form.is_valid():
-            usuario = form.save()
-            messages.success(
-                request,
-                f'Usuario {usuario.username} creado con el rol '
-                f'{form.cleaned_data["rol"]}.'
-            )
-            return redirect('usuario_list')
-        return self.render_form(form)
-
-    def form_vacio(self):
-        return self.form_con_datos()
-
-    def form_con_datos(self, data=None):
-        return UsuarioPersonalForm(
-data, roles_permitidos=roles_que_pueden_asignar(self.request.user))
-
-    def render_form(self, form):
-        return render(self.request, 'academico/usuarios_personal.html',
-                      {'form': form, 'titulo': 'Alta de personal',
-                       'volver': reverse('usuario_list')})
-
-
-class UsuarioUpdateView(BaseUsuarios, View):
-    """Cambia nombre, rol y estado de un usuario."""
-
-    def get(self, request, pk):
-        usuario = self.usuario(pk)
-        return self.render_form(self.form_con_datos(usuario=usuario), usuario)
-
-    def post(self, request, pk):
-        usuario = self.usuario(pk)
-        form = self.form_con_datos(request.POST, usuario=usuario)
-        if form.is_valid():
-            form.save()
-            messages.success(request, f'Usuario {usuario.username} actualizado.')
-            return redirect('usuario_list')
-        return self.render_form(form, usuario)
-
-    def usuario(self, pk):
-        perfil = (Perfil.objects
-                  .select_related('usuario', 'alumno')
-                  .filter(usuario_id=pk)
-                  .first())
-        if perfil is not None:
-            return perfil.usuario
-        return get_object_or_404(User, pk=pk)
-
-    def form_con_datos(self, data=None, usuario=None):
-        return UsuarioEdicionForm(
-            data, instance=usuario,
-            roles_permitidos=roles_que_pueden_asignar(self.request.user))
-
-    def render_form(self, form, usuario=None):
-        perfil = Perfil.objects.filter(usuario=usuario).first()
-        return render(self.request, 'academico/usuarios_edicion.html', {
-            'form': form,
-            'usuario': usuario,
-            'perfil': perfil,
-            'titulo': f'Editar usuario {usuario.username}',
-            'volver': reverse('usuario_list'),
-        })
-
-
-class UsuarioPasswordView(BaseUsuarios, View):
-    """Asigna o cambia la contraseña de un usuario."""
-
-    def get(self, request, pk):
-        return self.render_form(self.usuario(pk))
-
-    def post(self, request, pk):
-        usuario = self.usuario(pk)
-        form = PasswordForm(request.POST)
-        if form.is_valid():
-            form.aplicar(usuario)
-            messages.success(
-                request, f'Contraseña de {usuario.username} actualizada.')
-            return redirect('usuario_list')
-        return self.render_form(usuario, form)
-
-    def usuario(self, pk):
-        return get_object_or_404(User.objects.select_related('perfil'), pk=pk)
-
-    def render_form(self, usuario, form=None):
-        return render(self.request, 'academico/usuarios_password.html', {
-            'form': form or PasswordForm(),
-            'usuario': usuario,
-            'titulo': f'Contraseña de {usuario.username}',
-            'volver': reverse('usuario_list'),
-        })
 
 
 class UsuarioDeleteView(BaseUsuarios, DeleteView):
@@ -217,7 +62,111 @@ class UsuarioDeleteView(BaseUsuarios, DeleteView):
         return super().form_valid(form)
 
 
+def _pantalla_formulario(request, form_factory, titulo, exito, **extra):
+    """Muestra el formulario y, si es válido, guarda y vuelve al listado.
+
+    `form_factory` recibe los datos de la petición y devuelve el formulario,
+    de modo que el mensaje de éxito se arma con lo que devolvió `form.save()`.
+    """
+    form = form_factory(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        guardado = form.save()
+        messages.success(request, exito(guardado) if exito else '')
+        return redirect('usuario_list')
+    contexto = {
+        'form': form,
+        'titulo': titulo,
+        'volver': reverse('usuario_list'),
+        'sin_usuario': alumnos_sin_usuario().count(),
+    }
+    contexto.update(extra)
+    return render(request, FORMULARIO, contexto)
+
+
+def _usuario_por_id(pk):
+    """Devuelve el User esté o no tenga Perfil (un superusuario puede no tenerlo)."""
+    perfil = (Perfil.objects
+              .select_related('usuario', 'alumno')
+              .filter(usuario_id=pk)
+              .first())
+    if perfil is not None:
+        return perfil.usuario
+    return get_object_or_404(User, pk=pk)
+
+
 @requiere_rol(*ROLES_GESTION_USUARIOS)
 def usuario_redirect_alumno(request):
     """`/alumnos/nuevo/` apunta ahora a la pantalla de alta de alumnos."""
     return redirect(reverse('usuario_create_alumno'))
+
+
+@requiere_rol(*ROLES_GESTION_USUARIOS)
+def usuario_create_tipo(request):
+    """Paso 1: elegir qué tipo de usuario se va a crear."""
+    return render(request, 'academico/usuarios_tipo.html', {
+        'sin_usuario': alumnos_sin_usuario().count(),
+    })
+
+
+@requiere_rol(*ROLES_GESTION_USUARIOS)
+def usuario_create_alumno(request):
+    """Alta de alumno: se crean el alumno, su usuario y su rol."""
+    return _pantalla_formulario(
+        request, AlumnoForm, 'Alta de alumno',
+        lambda alumno: (f'Alumno {alumno.matricula} dado de alta. Ya puede '
+                        f'iniciar sesión con su matrícula y la contraseña '
+                        f'asignada.'))
+
+
+@requiere_rol(*ROLES_GESTION_USUARIOS)
+def usuario_create_alumno_existente(request):
+    """Da de acceso a un alumno que ya existía sin usuario."""
+    return _pantalla_formulario(
+        request, AlumnosSinUsuario, 'Dar acceso a un alumno',
+        lambda usuario: (f'{usuario.username} ya puede iniciar sesión como '
+                         f'estudiante.'))
+
+
+@requiere_rol(*ROLES_GESTION_USUARIOS)
+def usuario_create_personal(request):
+    """Alta de coordinador o administrador."""
+    roles = roles_que_pueden_asignar(request.user)
+    return _pantalla_formulario(
+        request,
+        lambda datos: UsuarioPersonalForm(datos, roles_permitidos=roles),
+        'Alta de personal',
+        lambda usuario: (f'Usuario {usuario.username} creado con el rol '
+                         f'{usuario.perfil.rol}.'))
+
+
+@requiere_rol(*ROLES_GESTION_USUARIOS)
+def usuario_update(request, pk):
+    """Cambia nombre, rol y estado de un usuario."""
+    usuario = _usuario_por_id(pk)
+    roles = roles_que_pueden_asignar(request.user)
+    return _pantalla_formulario(
+        request,
+        lambda datos: UsuarioEdicionForm(datos, instance=usuario,
+                                         roles_permitidos=roles),
+        f'Editar usuario {usuario.username}',
+        lambda usuario: f'Usuario {usuario.username} actualizado.',
+        usuario=usuario,
+        perfil=Perfil.objects.filter(usuario=usuario).first())
+
+
+@requiere_rol(*ROLES_GESTION_USUARIOS)
+def usuario_password(request, pk):
+    """Asigna o cambia la contraseña de un usuario."""
+    usuario = get_object_or_404(User.objects.select_related('perfil'), pk=pk)
+    form = PasswordForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        form.aplicar(usuario)
+        messages.success(
+            request, f'Contraseña de {usuario.username} actualizada.')
+        return redirect('usuario_list')
+    return render(request, FORMULARIO, {
+        'form': form,
+        'usuario': usuario,
+        'titulo': f'Contraseña de {usuario.username}',
+        'volver': reverse('usuario_list'),
+    })

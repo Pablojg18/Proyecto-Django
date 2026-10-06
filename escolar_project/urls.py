@@ -27,19 +27,17 @@ urlpatterns = [
 
     # Usuarios
     path('usuarios/', views.UsuarioListView.as_view(), name='usuario_list'),
-    path('usuarios/nuevo/', views.UsuarioTipoView.as_view(),
-         name='usuario_create'),
-    path('usuarios/nuevo/alumno/', views.UsuarioAlumnoCreateView.as_view(),
+    path('usuarios/nuevo/', views.usuario_create_tipo, name='usuario_create'),
+    path('usuarios/nuevo/alumno/', views.usuario_create_alumno,
          name='usuario_create_alumno'),
     path('usuarios/nuevo/alumno-existente/',
-         views.UsuarioAlumnoExistenteCreateView.as_view(),
+         views.usuario_create_alumno_existente,
          name='usuario_create_alumno_existente'),
-    path('usuarios/nuevo/personal/',
-         views.UsuarioPersonalCreateView.as_view(),
+    path('usuarios/nuevo/personal/', views.usuario_create_personal,
          name='usuario_create_personal'),
-    path('usuarios/<int:pk>/editar/', views.UsuarioUpdateView.as_view(),
+    path('usuarios/<int:pk>/editar/', views.usuario_update,
          name='usuario_update'),
-    path('usuarios/<int:pk>/password/', views.UsuarioPasswordView.as_view(),
+    path('usuarios/<int:pk>/password/', views.usuario_password,
          name='usuario_password'),
     path('usuarios/<int:pk>/eliminar/', views.UsuarioDeleteView.as_view(),
          name='usuario_delete'),
@@ -82,11 +80,11 @@ urlpatterns = [
          name='grupo_delete'),
 
     # Inscripción
-    path('inscripcion/', views.MiInscripcion.as_view(), name='mi_inscripcion'),
-    path('coordinacion/inscripcion/', views.AlumnosParaInscribir.as_view(),
+    path('inscripcion/', views.mi_inscripcion, name='mi_inscripcion'),
+    path('coordinacion/inscripcion/', views.alumnos_para_inscribir,
          name='inscripcion_alumnos'),
     path('coordinacion/inscripcion/<str:matricula>/',
-         views.InscripcionCoordinador.as_view(), name='inscripcion_alumno'),
+         views.inscripcion_alumno, name='inscripcion_alumno'),
 
     # Carga académica y cardex del estudiante
     path('mi-carga-academica/', views.mi_carga_academica,

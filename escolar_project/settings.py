@@ -122,12 +122,16 @@ LOGOUT_REDIRECT_URL = 'login'
 
 
 # Periodo con el que se crea el primer registro del catálogo `Periodo`.
-# Después de la migración, el periodo vigente se cambia desde la aplicación
-# (catálogo Periodos), no desde aquí.
+# Solo lo usa la migración `0005_periodo`; después, el periodo vigente se cambia
+# desde la aplicación (catálogo Periodos).
 PERIODO_ACTUAL = '2026-1'
 
-# Calificación mínima para considerar una materia como aprobada.
-CALIFICACION_APROBADA = Decimal('6.0')
+# Escala de calificación: cada unidad va de 0 a 100 y la calificación final de
+# la materia es el promedio de sus unidades.
+CALIFICACION_MAXIMA = Decimal('100')
+# Promedio mínimo (inclusive) para considerar una materia como aprobada:
+# de 70 a 100 aprobado, de 0 a 69 reprobado.
+CALIFICACION_APROBADA = Decimal('70')
 
 
 # Internationalization

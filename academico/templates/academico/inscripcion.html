@@ -5,7 +5,14 @@
 {% block contenido %}
 <h1>{{ titulo }}</h1>
 <p class="ayuda">
-    {% if forzar %}El coordinador puede registrar inscripciones aunque el alumno ya tenga carga activa.{% endif %}
+    {% if forzar %}
+        Puedes registrar o quitar materias cuando quieras, aunque el alumno ya
+        tenga carga activa.
+    {% else %}
+        Marca <strong>todas</strong> las materias que vas a cursar en este
+        periodo y envíalo una sola vez: después ya no podrás inscribirte
+        nuevamente hasta el siguiente periodo.
+    {% endif %}
     Periodo: <strong>{{ periodo_actual }}</strong>
 </p>
 
@@ -19,66 +26,78 @@
         <tr><th>Créditos acumulados:</th><td>{{ alumno.creditos_acumulados }} de {{ alumno.carrera.creditos }}</td></tr>
     </table>
     <p style="margin-top:.8rem;">
-        <a class="boton secundario" href="{% url 'carga_de_alumno' alumno.matricula %}">Ver carga académica</a>
+        <a class="boton secundario" href="{{ url_carga }}">Ver carga académica</a>
+        {% if es_administracion %}
+        <a class="boton secundario" href="{% url 'alumno_cardex' alumno.matricula %}">Ver cardex</a>
+        {% endif %}
     </p>
 </div>
 
 {% if carga_actual %}
 <div class="contenedor">
     <h2>Materias inscritas en el periodo</h2>
-    <table>
-        <thead>
-            <tr>
-                <th>Materia</th>
-                <th>Grupo</th>
-                <th>Horario</th>
-                <th>Aula</th>
-                <th class="numero">Créditos</th>
-                {% if forzar %}<th>Quitar</th>{% endif %}
-            </tr>
-        </thead>
-        <tbody>
-            {% for c in carga_actual %}
-            <tr>
-                <td>{{ c.grupo.materia.codigo }} – {{ c.grupo.materia.nombre }}</td>
-                <td>{{ c.grupo.periodo }} · {{ c.grupo.get_turno_display }}</td>
-                <td>{{ c.grupo.horario }}</td>
-                <td>{{ c.grupo.aula|default:"—" }}</td>
-                <td class="numero">{{ c.grupo.materia.creditos }}</td>
-                {% if forzar %}
-                <td>
-                    <label class="no-disponible">
-                        <input type="checkbox" name="quitar" value="{{ c.pk }}"> Dar de baja
-                    </label>
-                </td>
-                {% endif %}
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    {% if forzar %}
-    <form method="post" style="margin-top:.8rem;">
+    <form method="post" id="form-baja">
         {% csrf_token %}
-        <button type="submit" class="boton peligro">Quitar seleccionadas</button>
+        <table>
+            <thead>
+                <tr>
+                    <th>Materia</th>
+                    <th>Grupo</th>
+                    <th>Horario</th>
+                    <th>Turno</th>
+                    <th>Aula</th>
+                    <th class="numero">Créditos</th>
+                    {% if forzar %}<th>Quitar</th>{% endif %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in carga_actual %}
+                <tr>
+                    <td>{{ c.grupo.materia.codigo }} – {{ c.grupo.materia.nombre }}</td>
+                    <td>{{ c.grupo.periodo }}</td>
+                    <td>{{ c.grupo.horario }}</td>
+                    <td>{{ c.grupo.turno_display }}</td>
+                    <td>{{ c.grupo.aula|default:"—" }}</td>
+                    <td class="numero">{{ c.grupo.materia.creditos }}</td>
+                    {% if forzar %}
+                    <td>
+                        <label class="no-disponible">
+                            <input type="checkbox" name="quitar" value="{{ c.pk }}"
+                                   form="form-baja"> Dar de baja
+                        </label>
+                    </td>
+                    {% endif %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% if forzar %}
+        <button type="submit" name="accion" value="quitar"
+                class="boton peligro" form="form-baja">Quitar seleccionadas</button>
+        {% endif %}
     </form>
-    {% endif %}
 </div>
 {% endif %}
 
 <div class="contenedor">
     <h2>Materias disponibles del periodo {{ periodo_actual }}</h2>
 
-    {% if alumno.tiene_carga_activa and not forzar %}
+    {% if not puede_inscribirse %}
     <p class="etiqueta-estado no">
-        Ya tienes una carga académica activa en {{ periodo_actual }}. No puedes
-        inscribirte en más materias hasta que termine el periodo.
+        Ya te inscribiste en {{ periodo_actual }}. Solo puedes inscribirte una
+        vez por periodo: si necesitas agregar o quitar una materia, pide a tu
+        coordinador que lo haga.
     </p>
     {% endif %}
 
     <form method="post">
-        {% csrf_token }}
-        {% if form.non_field_errors %}
-        <ul class="mensajes"><li class="error">{{ form.non_field_errors|striptags }}</li></ul>
+        {% csrf_token %}
+        {% if form.errors %}
+        <ul class="mensajes">
+            {% for campo, errores in form.errors.items %}
+            {% for error in errores %}<li class="error">{{ error }}</li>{% endfor %}
+            {% endfor %}
+        </ul>
         {% endif %}
 
         {% if form.grupos.field.widget.choices %}
@@ -91,43 +110,17 @@
             </li>
             {% endfor %}
         </ul>
-        <button type="submit" class="boton"
-                {% if alumno.tiene_carga_activa and not forzar %}disabled{% endif %}>
+        <button type="submit" name="accion" value="inscribir" class="boton"
+                {% if not puede_inscribirse %}disabled{% endif %}>
             Inscribir materias seleccionadas
         </button>
         {% else %}
         <p class="no-disponible">
             No hay materias disponibles para inscripción en el periodo
-            {{ periodo_actual }}: todas son de otra carrera, ya están cursadas o
-            los grupos están llenos.
+            {{ periodo_actual }}: todas son de otra carrera, ya están cursadas,
+            se cruzan con tus materias actuales o los grupos están llenos.
         </p>
         {% endif %}
     </form>
-
-    {% if opciones %}
-    <h2 style="margin-top:1.2rem;">Materias no disponibles</h2>
-    <table>
-        <thead>
-            <tr>
-                <th>Materia</th>
-                <th>Grupo</th>
-                <th>Horario</th>
-                <th>Motivo</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for o in opciones %}
-            {% if not o.disponible %}
-            <tr>
-                <td>{{ o.grupo.materia.codigo }} – {{ o.grupo.materia.nombre }}</td>
-                <td>{{ o.grupo.periodo }} · {{ o.grupo.get_turno_display }}</td>
-                <td>{{ o.grupo.horario }}</td>
-                <td class="no-disponible">{{ o.motivo }}</td>
-            </tr>
-            {% endif %}
-            {% endfor %}
-        </tbody>
-    </table>
-    {% endif %}
 </div>
 {% endblock %}

@@ -1,8 +1,13 @@
-"""Vistas del sistema escolar agrupadas por responsabilidad."""
+"""Punto único de importación de las vistas.
 
-from .cardex import alumno_cardex, mi_cardex
-from .carga import carga_de_alumno, mi_carga_academica
-from .cuentas import CerrarSesion, IniciarSesion, index
+Las vistas viven en cuatro módulos por responsabilidad (`alumno`, `catalogos`,
+`cuentas`, `usuarios`) y aquí se reexportan para que `urls.py` y el resto del
+proyecto usen `academico.views.<nombre>`.
+"""
+
+from .alumno import (alumno_cardex, alumnos_para_inscribir, carga_de_alumno,
+                     inscripcion_alumno, mi_carga_academica, mi_cardex,
+                     mi_inscripcion)
 from .catalogos import (AlumnoCreateView, AlumnoDeleteView, AlumnoListView,
                         AlumnoUpdateView, CarreraCreateView, CarreraDeleteView,
                         CarreraListView, CarreraUpdateView, GrupoCreateView,
@@ -11,16 +16,16 @@ from .catalogos import (AlumnoCreateView, AlumnoDeleteView, AlumnoListView,
                         MateriaUpdateView, PeriodoActivarView,
                         PeriodoCreateView, PeriodoDeleteView, PeriodoListView,
                         PeriodoUpdateView)
-from .inscripcion import (AlumnosParaInscribir, InscripcionCoordinador,
-                         MiInscripcion)
-from .usuarios import (UsuarioAlumnoCreateView, UsuarioAlumnoExistenteCreateView,
-                       UsuarioDeleteView, UsuarioListView, UsuarioPasswordView,
-                       UsuarioPersonalCreateView, UsuarioTipoView,
-                       UsuarioUpdateView, usuario_redirect_alumno)
+from .cuentas import CerrarSesion, IniciarSesion, index
+from .usuarios import (UsuarioDeleteView, UsuarioListView,
+                       usuario_create_alumno,
+                       usuario_create_alumno_existente,
+                       usuario_create_personal, usuario_create_tipo,
+                       usuario_password, usuario_redirect_alumno,
+                       usuario_update)
 
 __all__ = [
-    'index',
-    'IniciarSesion', 'CerrarSesion',
+    'index', 'IniciarSesion', 'CerrarSesion',
     'AlumnoListView', 'AlumnoCreateView', 'AlumnoUpdateView',
     'AlumnoDeleteView',
     'CarreraListView', 'CarreraCreateView', 'CarreraUpdateView',
@@ -30,10 +35,10 @@ __all__ = [
     'GrupoListView', 'GrupoCreateView', 'GrupoUpdateView', 'GrupoDeleteView',
     'PeriodoListView', 'PeriodoCreateView', 'PeriodoUpdateView',
     'PeriodoDeleteView', 'PeriodoActivarView',
-    'AlumnosParaInscribir', 'InscripcionCoordinador', 'MiInscripcion',
+    'alumnos_para_inscribir', 'inscripcion_alumno', 'mi_inscripcion',
     'alumno_cardex', 'mi_cardex', 'carga_de_alumno', 'mi_carga_academica',
-    'UsuarioListView', 'UsuarioTipoView', 'UsuarioAlumnoCreateView',
-    'UsuarioAlumnoExistenteCreateView', 'UsuarioPersonalCreateView',
-    'UsuarioUpdateView', 'UsuarioPasswordView', 'UsuarioDeleteView',
+    'UsuarioListView', 'usuario_create_tipo', 'usuario_create_alumno',
+    'usuario_create_alumno_existente', 'usuario_create_personal',
+    'usuario_update', 'usuario_password', 'UsuarioDeleteView',
     'usuario_redirect_alumno',
 ]

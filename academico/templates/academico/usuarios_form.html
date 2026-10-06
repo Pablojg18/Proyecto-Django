@@ -1,0 +1,33 @@
+{% extends 'academico/base.html' %}
+
+{% block titulo %}{{ titulo }}{% endblock %}
+
+{% block contenido %}
+<h1>{{ titulo }}</h1>
+
+{% if form.non_field_errors %}
+<div class="contenedor">
+    <ul class="errores">
+        {% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+<div class="contenedor">
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <div class="acciones">
+            <button type="submit" class="boton">Guardar</button>
+            <a class="boton secundario" href="{{ volver }}">Cancelar</a>
+        </div>
+    </form>
+</div>
+
+{% if sin_usuario %}
+<p class="ayuda">
+    Hay {{ sin_usuario }} alumno(s) registrados sin usuario.
+    <a href="{% url 'usuario_create_alumno_existente' %}">Darles acceso</a>.
+</p>
+{% endif %}
+{% endblock %}

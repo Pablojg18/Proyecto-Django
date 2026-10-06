@@ -13,6 +13,7 @@
 </div>
 
 <div class="contenedor">
+    {% if perfiles %}
     <table id="tabla-usuarios" class="display" style="width:100%">
         <thead>
             <tr>
@@ -54,21 +55,20 @@
                     </div>
                 </td>
             </tr>
-            {% empty %}
-            <tr><td colspan="7">Sin usuarios registrados</td></tr>
             {% endfor %}
         </tbody>
     </table>
+    {% else %}
+    <p class="vacio">No hay usuarios registrados.</p>
+    {% endif %}
 </div>
 {% endblock %}
 
 {% block scripts %}
+{% if perfiles %}
 <script>
     const columnasExport = { columns: [0, 1, 2, 3, 4, 5] };
-    new DataTable('#tabla-usuarios', {
-        pageLength: 10,
-        language: { url: 'https://cdn.datatables.net/plug-ins/2.2.2/i18n/es-MX.json' },
-        dom: 'Bfrtip',
+    iniciarTabla('#tabla-usuarios', {
         columnDefs: [
             { targets: 6, orderable: false, searchable: false }
         ],
@@ -79,4 +79,5 @@
         ]
     });
 </script>
+{% endif %}
 {% endblock %}

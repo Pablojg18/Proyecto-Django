@@ -11,19 +11,37 @@
 </div>
 
 <p class="ayuda">
-    Solo se pueden inscribir alumnos en los grupos del periodo vigente
+    Cada grupo pertenece a un solo periodo, así que aquí solo se ven los grupos
+    del periodo que elijas. Solo se pueden inscribir alumnos en los grupos del
+    periodo vigente
     {% if periodo_activo %}(<strong>{{ periodo_activo.nombre }}</strong>){% endif %}.
-    Puedes cambiar el vigente desde <a href="{% url 'periodo_list' %}">Periodos</a>
-    o desde el selector del encabezado.
 </p>
 
 <div class="contenedor">
+    <form method="get" class="filtros">
+        <label for="periodo">Periodo:</label>
+        <select name="periodo" id="periodo" onchange="this.form.submit()">
+            {% for p in periodos %}
+            <option value="{{ p.pk }}"
+                    {% if p.pk == periodo_seleccionado.pk %}selected{% endif %}>
+                {{ p.nombre }}{% if p.activo %} (vigente){% endif %}
+            </option>
+            {% endfor %}
+        </select>
+        <noscript><button type="submit" class="boton">Ver</button></noscript>
+        {% if periodo_seleccionado and periodo_seleccionado.activo %}
+        <span class="etiqueta-estado ok">Periodo de inscripción</span>
+        {% endif %}
+    </form>
+</div>
+
+<div class="contenedor">
+    {% if grupos %}
     <table id="tabla-grupos" class="display" style="width:100%">
         <thead>
             <tr>
                 <th>Materia</th>
                 <th>Carrera</th>
-                <th>Periodo</th>
                 <th>Turno</th>
                 <th>Horario</th>
                 <th>Aula</th>
@@ -38,8 +56,7 @@
             <tr>
                 <td>{{ g.materia.codigo }} – {{ g.materia.nombre }}</td>
                 <td>{{ g.materia.carrera }}</td>
-                <td>{{ g.periodo }}</td>
-                <td>{{ g.get_turno_display }}</td>
+                <td>{{ g.turno_display }}</td>
                 <td>{{ g.horario }}</td>
                 <td>{{ g.aula|default:"—" }}</td>
                 <td class="numero">{{ g.num_alumnos }}</td>
@@ -52,22 +69,20 @@
                     </div>
                 </td>
             </tr>
-            {% empty %}
-            <tr><td colspan="10">Sin registros</td></tr>
             {% endfor %}
         </tbody>
     </table>
+    {% else %}
+    <p class="vacio">No hay grupos registrados en este periodo.</p>
+    {% endif %}
 </div>
 {% endblock %}
 
 {% block scripts %}
+{% if grupos %}
 <script>
-    new DataTable('#tabla-grupos', {
+    iniciarTabla('#tabla-grupos', {
         pageLength: 15,
-        language: { url: 'https://cdn.datatables.net/plug-ins/2.2.2/i18n/es-MX.json' },
-        dom: 'Bfrtip',
-        columnDefs: [{ targets: '.columna-numerica', type: 'num' },
-                     { targets: '.columna-acciones', orderable: false, searchable: false }],
         buttons: [
             { extend: 'excelHtml5', text: 'Exportar a Excel', title: 'Grupos' },
             { extend: 'csv' },
@@ -75,4 +90,5 @@
         ]
     });
 </script>
+{% endif %}
 {% endblock %}

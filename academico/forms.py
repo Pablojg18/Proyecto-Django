@@ -1,9 +1,13 @@
+from decimal import Decimal
+
 from django import forms
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
-from django.conf import settings
+from django.db.models import Q
 
-from .models import (Alumno, Calificacion, Carrera, Grupo, Materia, Perfil,
+from .models import (HORA_MAS_TARDE, HORA_MAS_TEMPRANA, Alumno,
+                     CalificacionUnidad, Carrera, Grupo, Materia, Perfil,
                      Periodo)
 from .permisos import rol_de
 
@@ -24,12 +28,16 @@ def validar_password_inicial(password):
 def roles_que_pueden_asignar(usuario):
     """El coordinador no puede crear administradores."""
     if rol_de(usuario) == 'ADMINISTRADOR':
-        return ROLES_PERSONAL + ROLES_FUNCIONAL
+        return ROLES_PERSONAL + (('ESTUDIANTE', 'Estudiante'),)
     return ROLES_FUNCIONAL
 
 
 class AlumnoForm(forms.ModelForm):
-    """Alta y edición de alumnos; al crear uno se genera su usuario."""
+    """Alta y edición de alumnos; al crear uno se genera su usuario.
+
+    La contraseña inicial solo se pide al dar de alta: al editar, la clave se
+    administra desde el catálogo de Usuarios.
+    """
 
     password_inicial = forms.CharField(
         required=False,
@@ -56,7 +64,10 @@ class AlumnoForm(forms.ModelForm):
         # Ojo: la matrícula es la clave primaria del alumno, así que un alumno
         # sin guardar tiene la.pk vacía (''), no None.
         self.es_nuevo = not self.instance.pk
-        self.fields['password_inicial'].required = self.es_nuevo
+        if not self.es_nuevo:
+            del self.fields['password_inicial']
+            return
+        self.fields['password_inicial'].required = True
 
     def clean_password_inicial(self):
         password = self.cleaned_data.get('password_inicial')
@@ -122,15 +133,29 @@ class PeriodoForm(forms.ModelForm):
         }
 
 
+HORARIO_WIDGET = {
+    'type': 'time', 'step': 1800,
+    'min': HORA_MAS_TEMPRANA.strftime('%H:%M'),
+    'max': HORA_MAS_TARDE.strftime('%H:%M'),
+}
+
+
 class GrupoForm(forms.ModelForm):
     class Meta:
         model = Grupo
-        fields = ['materia', 'periodo', 'turno', 'horario', 'aula',
+        fields = ['materia', 'periodo', 'hora_inicio', 'hora_fin', 'aula',
                   'cupo', 'num_alumnos']
         widgets = {
-            'horario': forms.TextInput(attrs={'placeholder': 'L-V 08:00-09:30'}),
+            'hora_inicio': forms.TimeInput(attrs=HORARIO_WIDGET),
+            'hora_fin': forms.TimeInput(attrs=HORARIO_WIDGET),
             'cupo': forms.NumberInput(attrs={'min': 1}),
             'num_alumnos': forms.NumberInput(attrs={'min': 0}),
+        }
+        help_texts = {
+            'hora_inicio': 'Entre las 07:00 y las 20:00.',
+            'hora_fin': 'Debe ser posterior a la hora de inicio.',
+            'periodo': 'El grupo solo se ofrece para inscripción si pertenece '
+                       'al periodo vigente.',
         }
 
     def __init__(self, *args, **kwargs):
@@ -139,56 +164,56 @@ class GrupoForm(forms.ModelForm):
             Materia.objects.select_related('carrera').order_by('carrera', 'codigo')
         )
         self.fields['periodo'].queryset = Periodo.objects.order_by('-nombre')
-        self.fields['periodo'].help_text = (
-            'Los grupos se ofrecen para inscripción solo si pertenecen al '
-            'periodo activo.')
         self.fields['periodo'].empty_label = 'Elige un periodo'
 
 
-class CalificacionForm(forms.ModelForm):
+class CalificacionUnidadForm(forms.ModelForm):
+    """Una calificación de unidad: de 0 a 100, en blanco si aún no se captura."""
+
     class Meta:
-        model = Calificacion
+        model = CalificacionUnidad
         fields = ['valor']
         widgets = {
             'valor': forms.NumberInput(
-                attrs={'step': '0.1', 'min': '0', 'max': '10',
+                attrs={'step': '0.1', 'min': '0', 'max': '100',
                        'class': 'campo-calificacion'}
             ),
         }
 
+    def clean_valor(self):
+        valor = self.cleaned_data['valor']
+        if valor is not None and valor < Decimal('0'):
+            raise forms.ValidationError('La calificación no puede ser negativa.')
+        return valor
 
-CalificacionFormSet = forms.modelformset_factory(
-    Calificacion,
-    form=CalificacionForm,
+
+CalificacionUnidadFormSet = forms.modelformset_factory(
+    CalificacionUnidad,
+    form=CalificacionUnidadForm,
     extra=0,
     can_delete=False,
 )
 
 
 def grupos_inscribibles(alumno, periodo):
-    """Grupos del periodo con el motivo por el que el alumno no puede entrar.
+    """Grupos del periodo que el alumno sí puede tomar.
 
-    Devuelve una lista de diccionarios: ``grupo``, ``disponible`` y ``motivo``.
+    Se descartan los que no aplican: materia ya cursada, grupo sin cupo y
+    grupos que se cruzan con los que ya tiene inscritos en el periodo.
     """
-    grupos = (Grupo.objects
-              .filter(periodo=periodo, materia__carrera=alumno.carrera)
-              .select_related('materia')
-              .order_by('materia__codigo', 'turno', 'horario'))
+    ya_inscritos = [c.grupo for c in alumno.calificaciones
+                    .filter(grupo__periodo=periodo).select_related('grupo')]
 
-    opciones = []
-    for grupo in grupos:
-        if alumno.ha_cursado(grupo.materia):
-            disponible, motivo = False, 'Materia ya cursada'
-        elif grupo.esta_lleno:
-            disponible, motivo = False, 'Grupo sin cupo'
-        else:
-            disponible, motivo = True, ''
-        opciones.append({
-            'grupo': grupo,
-            'disponible': disponible,
-            'motivo': motivo,
-        })
-    return opciones
+    disponibles = []
+    for grupo in (Grupo.objects
+                  .filter(periodo=periodo, materia__carrera=alumno.carrera)
+                  .select_related('materia')
+                  .order_by('materia__codigo', 'hora_inicio')):
+        if (alumno.ha_cursado(grupo.materia) or grupo.esta_lleno
+                or any(g.se_choca_con(grupo) for g in ya_inscritos)):
+            continue
+        disponibles.append(grupo)
+    return disponibles
 
 
 class GruposChoiceField(forms.ModelMultipleChoiceField):
@@ -198,7 +223,7 @@ class GruposChoiceField(forms.ModelMultipleChoiceField):
 
     def label_from_instance(self, grupo):
         return (f'{grupo.materia.codigo} – {grupo.materia.nombre} · '
-                f'{grupo.get_turno_display()} {grupo.horario} · '
+                f'{grupo.horario} ({grupo.turno_display}) · '
                 f'Aula {grupo.aula or "—"} · '
                 f'{grupo.lugares_disponibles} de {grupo.cupo} lugares')
 
@@ -211,16 +236,42 @@ class InscripcionForm(forms.Form):
         label='Materias a cursar',
     )
 
-    def __init__(self, *args, opciones=None, **kwargs):
+    def __init__(self, *args, opciones=None, alumno=None, **kwargs):
         super().__init__(*args, **kwargs)
-        disponibles = [o['grupo'] for o in (opciones or []) if o['disponible']]
+        self.alumno = alumno
         self.fields['grupos'].queryset = Grupo.objects.filter(
-            pk__in=[g.pk for g in disponibles]
-        ).order_by('materia__codigo', 'turno', 'horario')
+            pk__in=[g.pk for g in (opciones or [])]
+        ).order_by('materia__codigo', 'hora_inicio')
+
+    def clean_grupos(self):
+        """No se admite más de un grupo por horario."""
+        grupos = self.cleaned_data['grupos']
+        for i, grupo in enumerate(grupos):
+            for otro in grupos[i + 1:]:
+                if grupo.se_choca_con(otro):
+                    raise ValidationError(
+                        f'{grupo.materia.codigo} ({grupo.horario}) y '
+                        f'{otro.materia.codigo} ({otro.horario}) se imparten '
+                        f'a la misma hora.'
+                    )
+        if self.alumno is not None:
+            propio = self.alumno.choca_con_sus_grupos(grupos)
+            if propio is not None:
+                elegidos = ', '.join(g.materia.codigo for g in grupos)
+                raise ValidationError(
+                    f'{elegidos} se cruza con {propio.materia.codigo} '
+                    f'({propio.horario}), que {self.alumno.matricula} ya tiene '
+                    f'inscrita.'
+                )
+        return grupos
 
 
 class FiltroAlumnosForm(forms.Form):
-    """Búsqueda de alumnos por matrícula, nombre o carrera."""
+    """Búsqueda de alumnos por matrícula, nombre, carrera, estatus o semestre.
+
+    `aplicar()` concentra los filtros para que el catálogo de alumnos y el de
+    inscripción los compartan sin repetir el código.
+    """
 
     q = forms.CharField(
         required=False,
@@ -233,6 +284,38 @@ class FiltroAlumnosForm(forms.Form):
         label='Carrera',
         empty_label='Todas las carreras',
     )
+    estatus = forms.ChoiceField(
+        required=False,
+        label='Estatus',
+        choices=[('', 'Todos los estatus')] + list(Alumno.ESTATUS_CHOICES),
+    )
+    semestre = forms.IntegerField(
+        required=False,
+        label='Semestre',
+        min_value=1,
+        widget=forms.NumberInput(attrs={'placeholder': 'Semestre', 'min': 1,
+                                         'style': 'width:6rem'}),
+    )
+
+    def aplicar(self, alumnos):
+        """Aplica los filtros indicados al queryset de alumnos."""
+        if not self.is_valid():
+            return alumnos
+        datos = self.cleaned_data
+        if datos['q']:
+            busqueda = datos['q']
+            alumnos = alumnos.filter(
+                Q(matricula__icontains=busqueda)
+                | Q(nombre__icontains=busqueda)
+                | Q(carrera__nombre__icontains=busqueda)
+            )
+        if datos['carrera']:
+            alumnos = alumnos.filter(carrera=datos['carrera'])
+        if datos['estatus']:
+            alumnos = alumnos.filter(estatus=datos['estatus'])
+        if datos['semestre']:
+            alumnos = alumnos.filter(semestre=datos['semestre'])
+        return alumnos
 
 
 # --- Gestión de usuarios ----------------------------------------------------

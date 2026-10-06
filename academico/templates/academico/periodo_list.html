@@ -15,6 +15,7 @@
 </p>
 
 <div class="contenedor">
+    {% if periodos %}
     <table id="tabla-periodos" class="display" style="width:100%">
         <thead>
             <tr>
@@ -51,24 +52,20 @@
                     </div>
                 </td>
             </tr>
-            {% empty %}
-            <tr><td colspan="4">Sin periodos registrados</td></tr>
             {% endfor %}
         </tbody>
     </table>
+    {% else %}
+    <p class="vacio">No hay periodos registrados.</p>
+    {% endif %}
 </div>
 {% endblock %}
 
 {% block scripts %}
+{% if periodos %}
 <script>
     const columnasExport = { columns: [0, 1, 2] };
-    new DataTable('#tabla-periodos', {
-        language: { url: 'https://cdn.datatables.net/plug-ins/2.2.2/i18n/es-MX.json' },
-        dom: 'Bfrtip',
-        columnDefs: [
-            { targets: '.columna-numerica', type: 'num' },
-            { targets: '.columna-acciones', orderable: false, searchable: false }
-        ],
+    iniciarTabla('#tabla-periodos', {
         buttons: [
             { extend: 'excelHtml5', text: 'Exportar a Excel', title: 'Periodos', exportOptions: columnasExport },
             { extend: 'csv', exportOptions: columnasExport },
@@ -76,4 +73,5 @@
         ]
     });
 </script>
+{% endif %}
 {% endblock %}
